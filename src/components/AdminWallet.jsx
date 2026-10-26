@@ -5,29 +5,30 @@ import { useListPaymentsQuery } from "../services/api/paymentApi";
 import { useGetCoinPackagesQuery } from "../services/api/coinPackageApi";
 import { useListUserRewardsQuery } from "../services/api/userRewardApi";
 import { getErrorMessage } from "../lib/apiHelpers";
+import { colors } from "../theme";
 
 const PAGE_SIZE = 4;
 
 // key wale cards live hain, baaki ki API abhi nahi hai
 const STATS = [
-  { key: "carrots", label: "Total Carrots Distributed", value: "2.14M", noteColor: "#DBEE2A", note: "All users, all time" },
-  { key: "coins", label: "Total Coins Distributed", value: "841K", noteColor: "#B4C5FF", note: "Purchased + Free" },
-  { key: "redeemed", label: "Carrots Redeemed", value: "980K", noteColor: "#FFB4AB", note: "Via rewards shop" },
-  { key: "users", label: "Users with Transactions", value: "4,829", noteColor: "#DEE2F5", note: "Active all time" },
-  { key: "revenue", label: "Coin Purchases Revenue", value: "$1800", noteColor: "#DBEE2A", note: "This Month" },
+  { key: "carrots", label: "Total Carrots Distributed", value: "2.14M", noteColor: colors.primaryBright, note: "All users, all time" },
+  { key: "coins", label: "Total Coins Distributed", value: "841K", noteColor: colors.accentSoft, note: "Purchased + Free" },
+  { key: "redeemed", label: "Carrots Redeemed", value: "980K", noteColor: colors.dangerSoft, note: "Via rewards shop" },
+  { key: "users", label: "Users with Transactions", value: "4,829", noteColor: colors.textLight, note: "Active all time" },
+  { key: "revenue", label: "Coin Purchases Revenue", value: "$1800", noteColor: colors.primaryBright, note: "This Month" },
 ];
 
 // Distribution bars: API nahi hai, static
 const CARROT_DIST = [
-  { label: "Game target achieved", value: "940K", pct: 75, color: "#DBEE2A" },
-  { label: "Daily login / streak", value: "420K", pct: 45, color: "#B4C5FF" },
-  { label: "Referral bonus", value: "310K", pct: 32, color: "#DDB8FF" },
+  { label: "Game target achieved", value: "940K", pct: 75, color: colors.primaryBright },
+  { label: "Daily login / streak", value: "420K", pct: 45, color: colors.accentSoft },
+  { label: "Referral bonus", value: "310K", pct: 32, color: colors.chartPurple },
 ];
 
 const COIN_DIST = [
-  { label: "Bundle purchase", value: "620K", pct: 65, color: "#0053DB" },
-  { label: "Daily free coins", value: "118K", pct: 18, color: "#8C2AE3" },
-  { label: "Streak bonus", value: "62K", pct: 12, color: "#1B3A7D" },
+  { label: "Bundle purchase", value: "620K", pct: 65, color: colors.accentPrimary },
+  { label: "Daily free coins", value: "118K", pct: 18, color: colors.chartPurpleAccent },
+  { label: "Streak bonus", value: "62K", pct: 12, color: colors.accentDeep },
 ];
 
 const TYPE_OPTIONS = [
@@ -42,9 +43,9 @@ const PERIOD_OPTIONS = [
   { value: "30d", label: "Last 30 days" },
 ];
 
-const BORDER_COLOR = "rgba(59,130,246,0.22)";
-const ROW_BORDER = "rgba(59,130,246,0.12)";
-const CARD_STYLE = { backgroundColor: "#091E46", borderColor: BORDER_COLOR };
+const BORDER_COLOR = colors.border;
+const ROW_BORDER = colors.borderSoft;
+const CARD_STYLE = { backgroundColor: colors.surface, borderColor: BORDER_COLOR };
 
 const compactNumber = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 2 });
 
@@ -79,10 +80,10 @@ function DistBar({ label, value, pct, color }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-between font-['Montserrat'] font-medium text-xs leading-4 tracking-[0.6px]">
-        <span style={{ color: "#D0D0D0" }}>{label}</span>
-        <span style={{ color: "#DEE2F5" }}>{value}</span>
+        <span style={{ color: colors.textPrimary }}>{label}</span>
+        <span style={{ color: colors.textLight }}>{value}</span>
       </div>
-      <div className="w-full h-3 rounded-full" style={{ backgroundColor: "#091E46" }}>
+      <div className="w-full h-3 rounded-full" style={{ backgroundColor: colors.surface }}>
         <div className="h-3 rounded-[4px]" style={{ width: `${pct}%`, backgroundColor: color }} />
       </div>
     </div>
@@ -95,8 +96,8 @@ function Dropdown({ value, onChange, options }) {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="appearance-none font-['Montserrat'] font-normal text-sm leading-5 pl-4 pr-10 py-3 rounded-lg border focus:outline-none focus:ring-2 focus:ring-yellow-400"
-        style={{ backgroundColor: "#091E46", borderColor: BORDER_COLOR, color: "#D0D0D0" }}
+        className="appearance-none font-['Montserrat'] font-normal text-sm leading-5 pl-4 pr-10 py-3 rounded-lg border focus:outline-none focus:ring-2 focus:ring-primary-bright"
+        style={{ backgroundColor: colors.surface, borderColor: BORDER_COLOR, color: colors.textPrimary }}
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -106,7 +107,7 @@ function Dropdown({ value, onChange, options }) {
       </select>
       <ChevronDown
         className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-        style={{ color: "#D0D0D0" }}
+        style={{ color: colors.textPrimary }}
       />
     </div>
   );
@@ -274,10 +275,10 @@ export default function AdminWallet() {
     <AdminLayout>
       <div className="flex items-start justify-between mb-7 flex-wrap gap-3">
         <div>
-          <h1 className="font-['Montserrat'] font-bold text-[32px] leading-[40px]" style={{ color: "#D0D0D0" }}>
+          <h1 className="font-['Montserrat'] font-bold text-[32px] leading-[40px]" style={{ color: colors.textPrimary }}>
             Wallet
           </h1>
-          <p className="font-['Montserrat'] font-normal text-base leading-6" style={{ color: "#D0D0D0" }}>
+          <p className="font-['Montserrat'] font-normal text-base leading-6" style={{ color: colors.textPrimary }}>
             Centralized management for in-game currency and transaction audits.
           </p>
         </div>
@@ -286,7 +287,7 @@ export default function AdminWallet() {
           onClick={() => exportCsv(filtered)}
           disabled={filtered.length === 0}
           className="flex items-center w-[156px] h-[46px] pl-3 gap-[17.62px] rounded-lg border hover:brightness-110 transition disabled:opacity-50"
-          style={{ backgroundColor: "#1F2D63", borderColor: BORDER_COLOR, color: "#DEE2F5" }}
+          style={{ backgroundColor: colors.button, borderColor: BORDER_COLOR, color: colors.textLight }}
         >
           <Download className="w-4 h-4 shrink-0" />
           <span className="font-['Plus_Jakarta_Sans'] font-semibold text-base leading-6 whitespace-nowrap">
@@ -299,9 +300,9 @@ export default function AdminWallet() {
         <div
           className="mb-6 rounded-lg px-4 py-3 text-sm font-['Montserrat']"
           style={{
-            color: "#FFB4AB",
-            backgroundColor: "rgba(255,97,97,0.1)",
-            border: "1px solid rgba(255,97,97,0.25)",
+            color: colors.dangerSoft,
+            backgroundColor: colors.dangerBg10,
+            border: `1px solid ${colors.dangerBg25}`,
           }}
         >
           {data.errors.join(" | ")}
@@ -317,7 +318,7 @@ export default function AdminWallet() {
           >
             <p
               className="font-['Montserrat'] font-medium text-xs leading-4 tracking-[0.6px] uppercase min-h-[32px]"
-              style={{ color: "#6B7280" }}
+              style={{ color: colors.textSecondary }}
             >
               {s.label}
             </p>
@@ -338,7 +339,7 @@ export default function AdminWallet() {
           className="flex flex-col gap-8 rounded-2xl border px-8 pt-[31.5px] pb-8 lg:min-h-[352px]"
           style={CARD_STYLE}
         >
-          <h2 className="font-['Montserrat'] font-semibold text-lg leading-6" style={{ color: "#D0D0D0" }}>
+          <h2 className="font-['Montserrat'] font-semibold text-lg leading-6" style={{ color: colors.textPrimary }}>
             Carrot distribution by type
           </h2>
           {CARROT_DIST.map((d) => (
@@ -350,7 +351,7 @@ export default function AdminWallet() {
           className="flex flex-col gap-8 rounded-2xl border px-8 pt-[31.5px] pb-8 lg:min-h-[352px]"
           style={CARD_STYLE}
         >
-          <h2 className="font-['Montserrat'] font-semibold text-lg leading-6" style={{ color: "#D0D0D0" }}>
+          <h2 className="font-['Montserrat'] font-semibold text-lg leading-6" style={{ color: colors.textPrimary }}>
             Coin distribution by type
           </h2>
           {COIN_DIST.map((d) => (
@@ -362,22 +363,22 @@ export default function AdminWallet() {
           className="flex flex-col gap-6 rounded-2xl border p-8 lg:min-h-[352px]"
           style={CARD_STYLE}
         >
-          <h2 className="font-['Montserrat'] font-semibold text-lg leading-6" style={{ color: "#D0D0D0" }}>
+          <h2 className="font-['Montserrat'] font-semibold text-lg leading-6" style={{ color: colors.textPrimary }}>
             Top Bundles
           </h2>
           <div className="flex flex-col gap-4">
             {data.loading && (
-              <p className="font-['Montserrat'] text-sm" style={{ color: "#6B7280" }}>
+              <p className="font-['Montserrat'] text-sm" style={{ color: colors.textSecondary }}>
                 Loading bundles...
               </p>
             )}
             {!data.loading && topBundles && topBundles.length === 0 && (
-              <p className="font-['Montserrat'] text-sm" style={{ color: "#6B7280" }}>
+              <p className="font-['Montserrat'] text-sm" style={{ color: colors.textSecondary }}>
                 No purchases yet.
               </p>
             )}
             {!data.loading && !topBundles && (
-              <p className="font-['Montserrat'] text-sm" style={{ color: "#FFB4AB" }}>
+              <p className="font-['Montserrat'] text-sm" style={{ color: colors.dangerSoft }}>
                 Could not load bundles.
               </p>
             )}
@@ -388,23 +389,23 @@ export default function AdminWallet() {
                 style={{ borderColor: BORDER_COLOR }}
               >
                 <div>
-                  <p className="font-['Montserrat'] font-bold text-sm leading-5" style={{ color: "#D0D0D0" }}>
+                  <p className="font-['Montserrat'] font-bold text-sm leading-5" style={{ color: colors.textPrimary }}>
                     {b.name}
                   </p>
                   <p
                     className="font-['Montserrat'] font-medium text-xs leading-4 tracking-[0.6px]"
-                    style={{ color: "#6B7280" }}
+                    style={{ color: colors.textSecondary }}
                   >
                     {b.price}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-['Montserrat'] font-bold text-sm leading-5" style={{ color: "#DBEE2A" }}>
+                  <p className="font-['Montserrat'] font-bold text-sm leading-5" style={{ color: colors.primaryBright }}>
                     {b.count.toLocaleString()}
                   </p>
                   <p
                     className="font-['Montserrat'] font-medium text-[10px] leading-4 tracking-[0.6px]"
-                    style={{ color: "rgba(107,114,128,0.4)" }}
+                    style={{ color: colors.muted40 }}
                   >
                     SOLD
                   </p>
@@ -420,7 +421,7 @@ export default function AdminWallet() {
           className="flex items-center justify-between flex-wrap gap-3 p-6 border-b"
           style={{ borderColor: BORDER_COLOR }}
         >
-          <h2 className="font-['Montserrat'] font-bold text-[32px] leading-[40px]" style={{ color: "#D0D0D0" }}>
+          <h2 className="font-['Montserrat'] font-bold text-[32px] leading-[40px]" style={{ color: colors.textPrimary }}>
             Recent Economy Events
           </h2>
           <div className="flex items-center gap-4">
@@ -455,7 +456,7 @@ export default function AdminWallet() {
               <col style={{ width: 111 }} />
             </colgroup>
             <thead>
-              <tr style={{ backgroundColor: "#120D2A", borderBottom: `1px solid ${BORDER_COLOR}`, color: "#D0D0D0" }}>
+              <tr style={{ backgroundColor: colors.surfaceElevated, borderBottom: `1px solid ${BORDER_COLOR}`, color: colors.textPrimary }}>
                 <th className={`${TH} pl-6 pr-2`}>Txn ID</th>
                 <th className={TH}>User</th>
                 <th className={TH}>
@@ -470,7 +471,7 @@ export default function AdminWallet() {
             <tbody>
               {data.loading && (
                 <tr>
-                  <td colSpan={7} className="py-6 pl-6 font-['Montserrat'] text-sm" style={{ color: "#6B7280" }}>
+                  <td colSpan={7} className="py-6 pl-6 font-['Montserrat'] text-sm" style={{ color: colors.textSecondary }}>
                     Loading events...
                   </td>
                 </tr>
@@ -478,7 +479,7 @@ export default function AdminWallet() {
 
               {!data.loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-6 pl-6 font-['Montserrat'] text-sm" style={{ color: "#6B7280" }}>
+                  <td colSpan={7} className="py-6 pl-6 font-['Montserrat'] text-sm" style={{ color: colors.textSecondary }}>
                     No economy events found.
                   </td>
                 </tr>
@@ -491,7 +492,7 @@ export default function AdminWallet() {
                 >
                   <td
                     className={`${TD} pl-6 pr-2 whitespace-nowrap font-['Montserrat'] font-medium text-xs leading-4 tracking-[0.6px]`}
-                    style={{ color: "#6B7280" }}
+                    style={{ color: colors.textSecondary }}
                   >
                     {e.txn}
                   </td>
@@ -499,22 +500,22 @@ export default function AdminWallet() {
                     <div className="flex items-center gap-3">
                       <span
                         className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center"
-                        style={{ backgroundColor: "#1F2C73", color: "#DBE21C" }}
+                        style={{ backgroundColor: colors.buttonAlt, color: colors.primary }}
                       >
                         <User className="w-4 h-4" />
                       </span>
                       <div className="flex flex-col">
-                        <span className="font-['Montserrat'] font-bold text-sm leading-5" style={{ color: "#D0D0D0" }}>
+                        <span className="font-['Montserrat'] font-bold text-sm leading-5" style={{ color: colors.textPrimary }}>
                           User #{e.userId}
                         </span>
-                        <span className="font-['Montserrat'] font-normal text-[10px] leading-[15px]" style={{ color: "#6B7280" }}>
+                        <span className="font-['Montserrat'] font-normal text-[10px] leading-[15px]" style={{ color: colors.textSecondary }}>
                           USR-{String(e.userId).padStart(5, "0")}
                         </span>
                       </div>
                     </div>
                   </td>
                   <td className={TD}>
-                    <p className="max-w-[54px] font-['Montserrat'] font-normal text-sm leading-5" style={{ color: "#6B7280" }}>
+                    <p className="max-w-[54px] font-['Montserrat'] font-normal text-sm leading-5" style={{ color: colors.textSecondary }}>
                       {formatDateTime(e.date)}
                     </p>
                   </td>
@@ -522,29 +523,29 @@ export default function AdminWallet() {
                     <span
                       className="inline-block rounded-full border px-[10px] py-[2px] font-['Montserrat'] font-bold text-[10px] leading-[15px] uppercase whitespace-nowrap text-center"
                       style={{
-                        backgroundColor: "rgba(219,238,42,0.10)",
-                        borderColor: "rgba(219,238,42,0.20)",
-                        color: "#DBE21C",
+                        backgroundColor: colors.primaryBg10,
+                        borderColor: colors.primaryBg20,
+                        color: colors.primary,
                       }}
                     >
                       {e.type}
                     </span>
                   </td>
                   <td className={TD}>
-                    <p className="max-w-[128px] font-['Montserrat'] font-normal text-sm leading-5" style={{ color: "#6B7280" }}>
+                    <p className="max-w-[128px] font-['Montserrat'] font-normal text-sm leading-5" style={{ color: colors.textSecondary }}>
                       {e.desc}
                     </p>
                   </td>
                   <td
                     className={`${TD} text-right font-['Montserrat'] font-bold text-base leading-6`}
-                    style={{ color: e.positive ? "#DBE21C" : "#FFB4AB" }}
+                    style={{ color: e.positive ? colors.primary : colors.dangerSoft }}
                   >
                     {e.amount}
                   </td>
                   {/* Balance: API mein nahi hai */}
                   <td
                     className={`${TD} pr-6 text-right font-['Montserrat'] font-medium text-xs leading-4 tracking-[0.6px]`}
-                    style={{ color: "#D0D0D0" }}
+                    style={{ color: colors.textPrimary }}
                   >
                     -
                   </td>
@@ -560,7 +561,7 @@ export default function AdminWallet() {
         >
           <span
             className="font-['Montserrat'] font-medium text-base leading-4 tracking-[0.6px]"
-            style={{ color: "#6B7280" }}
+            style={{ color: colors.textSecondary }}
           >
             Showing {from}-{to} of {filtered.length} events
           </span>
@@ -569,7 +570,7 @@ export default function AdminWallet() {
               onClick={() => setPage(Math.max(1, safePage - 1))}
               disabled={safePage === 1}
               className={`${PAGE_BTN} disabled:opacity-40`}
-              style={{ backgroundColor: "#091E46", borderColor: "#303443", color: "#6B7280" }}
+              style={{ backgroundColor: colors.surface, borderColor: colors.borderDark, color: colors.textSecondary }}
             >
               <ChevronLeft className="w-3 h-3" />
             </button>
@@ -580,8 +581,8 @@ export default function AdminWallet() {
                 className={PAGE_BTN}
                 style={
                   n === safePage
-                    ? { backgroundColor: "#DBEE2A", borderColor: "#DBEE2A", color: "#091E46", fontWeight: 700 }
-                    : { backgroundColor: "#091E46", borderColor: "#303443", color: "#6B7280" }
+                    ? { backgroundColor: colors.primaryBright, borderColor: colors.primaryBright, color: colors.surface, fontWeight: 700 }
+                    : { backgroundColor: colors.surface, borderColor: colors.borderDark, color: colors.textSecondary }
                 }
               >
                 {n}
@@ -591,7 +592,7 @@ export default function AdminWallet() {
               onClick={() => setPage(Math.min(totalPages, safePage + 1))}
               disabled={safePage === totalPages}
               className={`${PAGE_BTN} disabled:opacity-40`}
-              style={{ backgroundColor: "#091E46", borderColor: "#303443", color: "#6B7280" }}
+              style={{ backgroundColor: colors.surface, borderColor: colors.borderDark, color: colors.textSecondary }}
             >
               <ChevronRight className="w-3 h-3" />
             </button>

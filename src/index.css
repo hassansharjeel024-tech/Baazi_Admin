@@ -1,6 +1,49 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
 @import "tailwindcss";
 
+/*
+ * Theme CSS variables — keep in sync with src/theme/colors.js
+ * Use via Tailwind (bg-surface, text-text-primary, border-border) or var(--color-*)
+ */
+@theme {
+  --color-primary: #dbe21c;
+  --color-primary-bright: #dbee2a;
+  --color-primary-dark: #bfd100;
+
+  --color-background: #0f111a;
+  --color-surface: #091e46;
+  --color-surface-elevated: #120d2a;
+  --color-surface-panel: #1f2544;
+  --color-surface-form: #0b1330;
+  --color-surface-muted: #252a38;
+
+  --color-accent: #3b82f6;
+  --color-accent-primary: #0053db;
+  --color-accent-soft: #b4c5ff;
+  --color-button: #1f2d63;
+  --color-button-alt: #1f2c73;
+  --color-button-strong: #26346e;
+
+  --color-text-primary: #d0d0d0;
+  --color-text-secondary: #6b7280;
+  --color-text-light: #dee2f5;
+  --color-text-muted: #9ca3af;
+  --color-text-inverse: #ffffff;
+
+  --color-border: rgba(59, 130, 246, 0.22);
+  --color-border-soft: rgba(59, 130, 246, 0.12);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-muted: rgba(255, 255, 255, 0.1);
+
+  --color-success: #78ff47;
+  --color-warning: #ff8d58;
+  --color-danger: #ff6161;
+  --color-danger-soft: #ffb4ab;
+
+  --color-skeleton: rgba(255, 255, 255, 0.08);
+  --color-overlay: rgba(0, 0, 0, 0.6);
+}
+
 html,
 body {
   overflow-x: hidden;
@@ -9,4 +52,6 @@ body {
 
 body {
   font-family: 'Poppins', sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
 }

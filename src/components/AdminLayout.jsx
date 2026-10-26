@@ -17,17 +17,9 @@ import navRewardsActive from "../assets/nav-rewards-active.png";
 import navRedemptionsActive from "../assets/nav-redemptions-active.png";
 import navWalletActive from "../assets/nav-wallet-active.png";
 import navReferralsActive from "../assets/nav-referrals-active.png";
-import {
-  Search,
-  Bell,
-  HelpCircle,
-} from "lucide-react";
+import { Search, Bell, HelpCircle } from "lucide-react";
 import logo from "../assets/logo.png";
-
-// Figma values
-const LIME = "#DBE21C";
-const BASE = "#091E46"; // dark blue bg Color
-const BORDER = "rgba(59,130,246,0.22)"; // loading bar blue 22%
+import { colors } from "../theme";
 
 const NAV_ITEMS = [
   { label: "Dashboard", icon: navDashboard, iconActive: navDashboardActive, path: "/admin/dashboard" },
@@ -47,7 +39,7 @@ function Sidebar() {
   return (
     <aside
       className="w-[280px] shrink-0 flex flex-col justify-between pt-4 pb-4 h-screen sticky top-0 overflow-y-auto"
-      style={{ backgroundColor: BASE, borderRight: `1px solid ${BORDER}` }}
+      style={{ backgroundColor: colors.surface, borderRight: `1px solid ${colors.border}` }}
     >
       <div>
         <div className="px-5 pt-6 pb-8 flex items-center gap-2">
@@ -60,7 +52,7 @@ function Sidebar() {
               fontSize: "12px",
               lineHeight: "16px",
               letterSpacing: "1.2px",
-              color: "#D0D0D0",
+              color: colors.textPrimary,
             }}
           >
             Admin Portal
@@ -81,8 +73,8 @@ function Sidebar() {
                   fontWeight: 400,
                   fontSize: "16px",
                   lineHeight: "24px",
-                  backgroundColor: active ? "rgba(219,226,28,0.18)" : "transparent",
-                  color: active ? LIME : "#6B7280",
+                  backgroundColor: active ? colors.primaryBg18 : "transparent",
+                  color: active ? colors.primary : colors.textSecondary,
                 }}
               >
                 <img src={iconSrc} alt="" className="w-4 h-4 object-contain" />
@@ -90,7 +82,7 @@ function Sidebar() {
                 {active && (
                   <span
                     className="absolute right-0 top-0 bottom-0 w-[3px]"
-                    style={{ backgroundColor: LIME }}
+                    style={{ backgroundColor: colors.primary }}
                   />
                 )}
               </Link>
@@ -101,15 +93,14 @@ function Sidebar() {
 
       <div
         className="px-5 pt-4 pb-2 flex items-center justify-between"
-        style={{ borderTop: "1px solid rgba(70,72,51,0.3)" }}
+        style={{ borderTop: `1px solid ${colors.borderOlive}` }}
       >
         <div className="flex items-center gap-2 min-w-0">
-          {/* Real avatar chahiye to is div ki jagah <img src={avatar} className="w-8 h-8 rounded-full object-cover" /> lagayein */}
           <img
             src={adminAvatar}
             alt="Admin Root"
             className="w-8 h-8 rounded-full object-cover shrink-0"
-            style={{ border: "2px solid #DBE21C" }}
+            style={{ border: `2px solid ${colors.primary}` }}
           />
           <div className="min-w-0">
             <p
@@ -119,7 +110,7 @@ function Sidebar() {
                 fontWeight: 500,
                 fontSize: "16px",
                 lineHeight: "24px",
-                color: "#D0D0D0",
+                color: colors.textPrimary,
               }}
             >
               Admin Root
@@ -131,7 +122,7 @@ function Sidebar() {
                 fontWeight: 400,
                 fontSize: "16px",
                 lineHeight: "24px",
-                color: "#6B7280",
+                color: colors.textSecondary,
               }}
             >
               Super Admin
@@ -148,17 +139,17 @@ function Topbar() {
   return (
     <header
       className="h-16 shrink-0 flex items-center justify-between gap-4 px-6 relative z-10"
-      style={{ backgroundColor: BASE, borderBottom: `1px solid ${BORDER}` }}
+      style={{ backgroundColor: colors.surface, borderBottom: `1px solid ${colors.border}` }}
     >
       <div className="relative flex-1">
         <Search className="w-4 h-4 text-white/40 absolute left-4 top-1/2 -translate-y-1/2" />
         <input
           type="text"
           placeholder="Search"
-          className="w-full text-white text-sm rounded-lg placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          className="w-full text-white text-sm rounded-lg placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-bright"
           style={{
-            backgroundColor: "#153778",
-            border: `1px solid ${BORDER}`,
+            backgroundColor: colors.accentNav,
+            border: `1px solid ${colors.border}`,
             paddingTop: "9px",
             paddingBottom: "10px",
             paddingLeft: "44px",
@@ -170,7 +161,7 @@ function Topbar() {
       <div className="flex items-center gap-4 shrink-0">
         <button className="relative text-white/60 hover:text-white transition-colors">
           <Bell className="w-5 h-5" />
-          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />
+          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-success" />
         </button>
         <button className="text-white/60 hover:text-white transition-colors">
           <HelpCircle className="w-5 h-5" />
@@ -182,23 +173,21 @@ function Topbar() {
 
 export default function AdminLayout({ children }) {
   return (
-    <div className="h-screen flex overflow-hidden" style={{ backgroundColor: BASE }}>
+    <div className="h-screen flex overflow-hidden" style={{ backgroundColor: colors.surface }}>
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <Topbar />
         <main
           className="flex-1 overflow-y-auto relative"
           style={{
-            backgroundColor: "#0F111A",
-            backgroundImage: "linear-gradient(180deg, #0F111A 0%, #3B82F6 100%)",
+            backgroundColor: colors.background,
+            backgroundImage: `linear-gradient(180deg, ${colors.background} 0%, ${colors.accent} 100%)`,
           }}
         >
-          {/* Dot texture overlay — same as login screen, fades out vertically */}
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
-              backgroundImage:
-                "radial-gradient(rgba(255,255,255,0.18) 1.5px, transparent 1.5px)",
+              backgroundImage: `radial-gradient(${colors.loginDot} 1.5px, transparent 1.5px)`,
               backgroundSize: "27px 27px",
               WebkitMaskImage:
                 "linear-gradient(to bottom, black 0%, black 10%, transparent 55%)",

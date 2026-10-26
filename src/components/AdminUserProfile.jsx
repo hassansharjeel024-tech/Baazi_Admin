@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import profileAvatar from "../assets/profile-avatar.png";
+import { colors } from "../theme";
 const USER = {
   name: "Mohsin Riaz",
   initials: "MR",
@@ -34,9 +35,9 @@ const USER = {
 };
 
 const STAT_CARDS = [
-  { label: "CARROT BALANCE", value: "2400", icon: Receipt, valueColor: "#DEE2F5" },
-  { label: "XP / COINS EARNED", value: "696", icon: Zap, valueColor: "#DBE21C" },
-  { label: "TOTAL TRANSACTIONS", value: "9", icon: ArrowLeftRight, valueColor: "rgba(188,126,244,0.6)" },
+  { label: "CARROT BALANCE", value: "2400", icon: Receipt, valueColor: colors.textLight },
+  { label: "XP / COINS EARNED", value: "696", icon: Zap, valueColor: colors.primary },
+  { label: "TOTAL TRANSACTIONS", value: "9", icon: ArrowLeftRight, valueColor: colors.violetGlow },
 ];
 
 const TABS = [
@@ -49,9 +50,9 @@ const TABS = [
 const TRANSACTIONS = [
   {
     icon: ShoppingBag,
-    iconColor: "#DBEE2A",
+    iconColor: colors.primaryBright,
     iconSize: 18,
-    iconBg: "rgba(107,114,36,0.10)",
+    iconBg: colors.oliveBg10,
     title: "Purchased Mega Pack",
     subtitle: "Stripe · Card ending 4242 · $9.99",
     amount: "+10,000",
@@ -59,9 +60,9 @@ const TRANSACTIONS = [
   },
   {
     icon: Trophy,
-    iconColor: "#B4C5FF",
+    iconColor: colors.accentSoft,
     iconSize: 18,
-    iconBg: "rgba(0,83,219,0.10)",
+    iconBg: colors.accentBg10,
     title: "Task reward — Eat 20 apples",
     subtitle: "Snake Classic · Level 14",
     amount: "+20",
@@ -69,9 +70,9 @@ const TRANSACTIONS = [
   },
   {
     icon: Gift,
-    iconColor: "#FFB4AB",
+    iconColor: colors.dangerSoft,
     iconSize: 20,
-    iconBg: "rgba(255,180,171,0.10)",
+    iconBg: colors.dangerSoftBg10,
     title: "Redemption — AirPods Pro",
     subtitle: "Redemption #RDM-1040",
     amount: "-20,000",
@@ -79,9 +80,9 @@ const TRANSACTIONS = [
   },
 ];
 
-const BASE = "#091E46";
-const BORDER = "rgba(59,130,246,0.22)";
-const LIME = "#DBE21C";
+const BASE = colors.surface;
+const BORDER = colors.border;
+const LIME = colors.primary;
 
 const cardStyle = {
   backgroundColor: BASE,
@@ -89,16 +90,16 @@ const cardStyle = {
 };
 
 const btnStyle = {
-  backgroundColor: "#252A38",
+  backgroundColor: colors.surfaceMuted,
   border: `1px solid ${BORDER}`,
 };
 
 // Figma: Background+HorizontalBorder / Footer-Pagination
-const PANEL_HEADER_BG = "#120D2A";
-const PANEL_HEADER_BORDER = "#303443";
+const PANEL_HEADER_BG = colors.surfaceElevated;
+const PANEL_HEADER_BORDER = colors.borderDark;
 
 // Figma: List Item border
-const ROW_BORDER = "rgba(159,179,255,0.17)";
+const ROW_BORDER = colors.accentSoftBg;
 
 export default function AdminUserProfile() {
   const [activeTab, setActiveTab] = useState("Transactions");
@@ -110,10 +111,10 @@ export default function AdminUserProfile() {
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-[32px] leading-[40px] font-bold" style={{ color: "#D0D0D0" }}>
+          <h1 className="text-[32px] leading-[40px] font-bold" style={{ color: colors.textPrimary }}>
             {USER.name} - User Profile
           </h1>
-          <p className="text-base leading-6 mt-1 max-w-xl" style={{ color: "#D0D0D0" }}>
+          <p className="text-base leading-6 mt-1 max-w-xl" style={{ color: colors.textPrimary }}>
             Manage player accounts, monitor carrot balances, and oversee
             platform integrity with administrative controls.
           </p>
@@ -151,7 +152,7 @@ export default function AdminUserProfile() {
             
             </div>
             <div>
-              <p className="text-base leading-6 font-normal" style={{ color: "#FFFFFF" }}>{USER.name}</p>
+              <p className="text-base leading-6 font-normal" style={{ color: colors.white }}>{USER.name}</p>
               <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-400">
                 <span className="flex items-center gap-1.5">
                   <Mail size={14} />
@@ -169,13 +170,13 @@ export default function AdminUserProfile() {
               <div className="flex items-center flex-wrap gap-2 mt-3">
                <span
   className="px-3 py-1 rounded-full text-xs font-medium"
-  style={{ color: "#DBEE2A", backgroundColor: "rgba(219,238,42,0.2)", border: "1px solid rgba(219,238,42,0.3)" }}
+  style={{ color: colors.primaryBright, backgroundColor: colors.primaryBg20, border: `1px solid ${colors.primaryBg30}` }}
 >
   {USER.status}
 </span>
                <span
   className="px-2.5 py-1 rounded-full text-xs font-medium text-white"
-  style={{ backgroundColor: "#0053DB" }}
+  style={{ backgroundColor: colors.accentPrimary }}
 >
   {USER.level} 
 </span>
@@ -196,8 +197,8 @@ export default function AdminUserProfile() {
     className="flex items-center justify-center gap-2 rounded-lg text-sm font-medium hover:brightness-125 transition w-[116px] whitespace-nowrap"
   style={{
     backgroundColor: "transparent",
-    border: "1px solid #FFB4AB",
-    color: "#FFB4AB",
+    border: `1px solid ${colors.dangerSoft}`,
+    color: colors.dangerSoft,
     paddingTop: "10px",
     paddingBottom: "10px",
     paddingLeft: "38.39px",
@@ -209,7 +210,7 @@ export default function AdminUserProfile() {
 </button>
            <button
   className="flex items-center justify-center gap-2 rounded-lg text-sm font-medium text-white hover:brightness-110 transition w-[150px]"
-  style={{ backgroundColor: "#0053DB", border: "1px solid #0053DB", paddingTop: "10px", paddingBottom: "10px", paddingLeft: "44.02px", paddingRight: "44.02px" }}
+  style={{ backgroundColor: colors.accentPrimary, border: `1px solid ${colors.accentPrimary}`, paddingTop: "10px", paddingBottom: "10px", paddingLeft: "44.02px", paddingRight: "44.02px" }}
 >
   <KeyRound size={16} />
   Reset Password
@@ -230,7 +231,7 @@ export default function AdminUserProfile() {
               </div>
              <p
   className="text-[48px] leading-[56px] font-extrabold"
-  style={{ color: card.valueColor || "#fff", letterSpacing: "-0.96px" }}
+  style={{ color: card.valueColor || colors.white, letterSpacing: "-0.96px" }}
 >
   {card.value}
 </p>
@@ -241,7 +242,7 @@ export default function AdminUserProfile() {
 
       {/* Tabbed panel */}
       <div className="rounded-xl overflow-hidden" style={cardStyle}>
-        {/* Tab bar header — Figma: Background+HorizontalBorder, fill #120D2A, border-bottom #303443 */}
+        {/* Tab bar header — Figma: Background+HorizontalBorder, fill colors.surfaceElevated, border-bottom colors.borderDark */}
         <div
           className="flex items-center gap-2 py-6 px-8"
           style={{
@@ -257,12 +258,12 @@ export default function AdminUserProfile() {
                 onClick={() => setActiveTab(label)}
                 className="flex items-center gap-2 px-4 py-2 rounded-md transition"
                 style={{
-                  backgroundColor: active ? "rgba(219,226,28,0.15)" : "transparent",
+                  backgroundColor: active ? colors.primaryBg15 : "transparent",
                   fontFamily: "'Montserrat', sans-serif",
                   fontWeight: active ? 700 : 400,
                   fontSize: "16px",
                   lineHeight: "24px",
-                  color: active ? LIME : "#6B7280",
+                  color: active ? LIME : colors.textSecondary,
                 }}
               >
                 <Icon size={14} />
@@ -299,7 +300,7 @@ export default function AdminUserProfile() {
                               fontWeight: 400,
                               fontSize: "16px",
                               lineHeight: "24px",
-                              color: "#D0D0D0",
+                              color: colors.textPrimary,
                             }}
                           >
                             {tx.title}
@@ -317,7 +318,7 @@ export default function AdminUserProfile() {
                             fontSize: "24px",
                             lineHeight: "36px",
                             textAlign: "right",
-                            color: negative ? "#FFB4AB" : "#DBE21C",
+                            color: negative ? colors.dangerSoft : colors.primary,
                           }}
                         >
                           {tx.amount}
@@ -331,7 +332,7 @@ export default function AdminUserProfile() {
                             letterSpacing: "-0.8px",
                             textAlign: "right",
                             textTransform: "uppercase",
-                            color: "#6B7280",
+                            color: colors.textSecondary,
                           }}
                         >
                           {tx.unit}
@@ -342,7 +343,7 @@ export default function AdminUserProfile() {
                 })}
               </div>
 
-              {/* Footer / Pagination — Figma: fill #120D2A, border-top #303443 */}
+              {/* Footer / Pagination — Figma: fill colors.surfaceElevated, border-top colors.borderDark */}
               <div 
                                className="flex items-center justify-between mt-5 -mx-5 -mb-5 py-6 px-8"
                 style={{
@@ -358,7 +359,7 @@ export default function AdminUserProfile() {
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page === 1}
                     className="w-10 h-10 rounded-md flex items-center justify-center disabled:opacity-40"
-                    style={{ color: "#6B7280" }}
+                    style={{ color: colors.textSecondary }}
                   >
                     <ChevronLeft size={12} />
                   </button>
@@ -370,8 +371,8 @@ export default function AdminUserProfile() {
                         className="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-medium"
                         style={
                           n === page
-                            ? { backgroundColor: LIME, color: "#0A0E27" }
-                            : { color: "#9CA3AF", border: "1px solid #303443" }
+                            ? { backgroundColor: LIME, color: colors.backgroundDarkest }
+                            : { color: colors.textMuted, border: `1px solid ${colors.borderDark}` }
                         }
                       >
                         {n}
@@ -382,7 +383,7 @@ export default function AdminUserProfile() {
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages}
                     className="w-10 h-10 rounded-md flex items-center justify-center disabled:opacity-40"
-                    style={{ color: "#6B7280" }}
+                    style={{ color: colors.textSecondary }}
                   >
                     <ChevronRight size={12} />
                   </button>

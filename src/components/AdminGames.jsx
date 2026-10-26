@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Gamepad2, Trophy, Pencil, X } from "lucide-react";
 import AdminLayout from "./AdminLayout";
+import DataTable from "./ui/DataTable";
 import { useLazyGetGamesQuery, useUpdateGameMutation } from "../services/api/gameApi";
 import { getErrorMessage } from "../lib/apiHelpers";
+import { colors, alpha } from "../theme";
 
 const FONT = "'Montserrat', sans-serif";
 
@@ -33,30 +35,28 @@ const labelStyle = {
   lineHeight: "16px",
   letterSpacing: "1.2px",
   textTransform: "uppercase",
-  color: "#6B7280",
+  color: colors.textSecondary,
 };
 
 const inputStyle = {
   fontFamily: FONT,
   fontWeight: 400,
   fontSize: "14px",
-  color: "#D0D0D0",
-  backgroundColor: "#120D2A",
-  border: "1px solid rgba(59,130,246,0.22)",
+  color: colors.textPrimary,
+  backgroundColor: colors.surfaceElevated,
+  border: `1px solid ${colors.border}`,
   borderRadius: "8px",
   padding: "10px 12px",
   width: "100%",
   outline: "none",
 };
 
-const headCellStyle = {
+const bodyCellStyle = {
   fontFamily: FONT,
-  fontWeight: 500,
-  fontSize: "12px",
-  lineHeight: "16px",
-  letterSpacing: "1.2px",
-  textTransform: "uppercase",
-  color: "#6B7280",
+  fontWeight: 400,
+  fontSize: "16px",
+  lineHeight: "24px",
+  color: colors.textSecondary,
 };
 
 function Field({ label, children, full }) {
@@ -157,6 +157,78 @@ export default function AdminGames() {
     }
   }
 
+  const gamesColumns = useMemo(
+    () => [
+      {
+        key: "name",
+        header: "Game",
+        headerClassName: "py-3 px-5",
+        cellClassName: "py-4 px-5",
+        cellStyle: {
+          fontFamily: FONT,
+          fontWeight: 700,
+          fontSize: "16px",
+          lineHeight: "24px",
+          color: colors.white,
+        },
+        accessor: "name",
+      },
+      {
+        key: "category",
+        header: "Category",
+        headerClassName: "py-3 px-5",
+        cellClassName: "py-4 px-5",
+        cellStyle: bodyCellStyle,
+        accessor: "categoryName",
+      },
+      {
+        key: "players",
+        header: "Players",
+        headerClassName: "py-3 px-5",
+        cellClassName: "py-4 px-5",
+        cellStyle: bodyCellStyle,
+        render: () => "—",
+      },
+      {
+        key: "status",
+        header: "Status",
+        headerClassName: "py-3 px-5",
+        cellClassName: "py-4 px-5",
+        cellStyle: bodyCellStyle,
+        render: () => "—",
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        headerClassName: "py-3 px-5 text-right",
+        cellClassName: "py-4 px-5 text-right",
+        render: (g) => (
+          <button
+            type="button"
+            onClick={() => openEdit(g)}
+            className="inline-flex items-center gap-1.5 rounded-lg hover:brightness-110 transition"
+            style={{
+              backgroundColor: colors.button,
+              paddingTop: "6px",
+              paddingBottom: "6px",
+              paddingLeft: "16px",
+              paddingRight: "16px",
+              fontFamily: FONT,
+              fontWeight: 700,
+              fontSize: "16px",
+              lineHeight: "24px",
+              color: colors.white,
+            }}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            Edit
+          </button>
+        ),
+      },
+    ],
+    []
+  );
+
   return (
     <AdminLayout>
       <div className="mb-6">
@@ -167,7 +239,7 @@ export default function AdminGames() {
             fontSize: "32px",
             lineHeight: "40px",
             letterSpacing: "0px",
-            color: "#D0D0D0",
+            color: colors.textPrimary,
           }}
           className="mb-1"
         >
@@ -180,7 +252,7 @@ export default function AdminGames() {
             fontSize: "16px",
             lineHeight: "24px",
             letterSpacing: "0px",
-            color: "#D0D0D0",
+            color: colors.textPrimary,
           }}
         >
           Configure active tournaments, difficulty tiers, and prize allocations.
@@ -192,9 +264,9 @@ export default function AdminGames() {
           className="mb-4 rounded-lg px-4 py-3 text-sm"
           style={{
             fontFamily: FONT,
-            color: "#DBEE2A",
-            backgroundColor: "rgba(219,238,42,0.1)",
-            border: "1px solid rgba(219,238,42,0.2)",
+            color: colors.primaryBright,
+            backgroundColor: colors.primaryBg10,
+            border: `1px solid ${colors.primaryBg20}`,
           }}
         >
           {notice}
@@ -205,13 +277,13 @@ export default function AdminGames() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div
           className="rounded-2xl p-6"
-          style={{ backgroundColor: "#091E46", border: "1px solid rgba(59,130,246,0.22)" }}
+          style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
         >
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center mb-4"
-            style={{ backgroundColor: "#3B82F622" }}
+            style={{ backgroundColor: colors.accentBg22 }}
           >
-            <Gamepad2 className="w-4 h-4" style={{ color: "#3B82F6" }} />
+            <Gamepad2 className="w-4 h-4" style={{ color: colors.accent }} />
           </div>
           <p
             className="mb-1"
@@ -222,7 +294,7 @@ export default function AdminGames() {
               lineHeight: "16px",
               letterSpacing: "1.2px",
               textTransform: "uppercase",
-              color: "#BFD100",
+              color: colors.primaryDark,
             }}
           >
             Active Players
@@ -235,7 +307,7 @@ export default function AdminGames() {
                 fontSize: "48px",
                 lineHeight: "56px",
                 letterSpacing: "-0.96px",
-                color: "#FFFFFF",
+                color: colors.white,
               }}
             >
               12.4k
@@ -246,7 +318,7 @@ export default function AdminGames() {
                 fontWeight: 700,
                 fontSize: "14px",
                 lineHeight: "20px",
-                color: "#BFD100",
+                color: colors.primaryDark,
               }}
             >
               +18% ↑
@@ -256,13 +328,13 @@ export default function AdminGames() {
 
         <div
           className="rounded-2xl p-6"
-          style={{ backgroundColor: "#091E46", border: "1px solid rgba(59,130,246,0.22)" }}
+          style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
         >
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center mb-4"
-            style={{ backgroundColor: "#DBE21C22" }}
+            style={{ backgroundColor: alpha(colors.primary, 0.13) }}
           >
-            <Trophy className="w-4 h-4" style={{ color: "#DBE21C" }} />
+            <Trophy className="w-4 h-4" style={{ color: colors.primary }} />
           </div>
           <div className="flex items-center justify-between">
             <div>
@@ -275,7 +347,7 @@ export default function AdminGames() {
                   lineHeight: "16px",
                   letterSpacing: "1.2px",
                   textTransform: "uppercase",
-                  color: "#D0D0D0",
+                  color: colors.textPrimary,
                 }}
               >
                 Total Prize Pool Distributed
@@ -287,7 +359,7 @@ export default function AdminGames() {
                   fontSize: "48px",
                   lineHeight: "56px",
                   letterSpacing: "-0.96px",
-                  color: "#FFFFFF",
+                  color: colors.white,
                 }}
               >
                 $1,45,20,000
@@ -303,7 +375,7 @@ export default function AdminGames() {
                     borderTopLeftRadius: "2px",
                     borderTopRightRadius: "2px",
                     backgroundColor:
-                      bar.opacity === 1 ? "#DBE21C" : `rgba(219,238,42,${bar.opacity})`,
+                      bar.opacity === 1 ? colors.primary : alpha(colors.primaryBright, bar.opacity),
                   }}
                 />
               ))}
@@ -315,147 +387,41 @@ export default function AdminGames() {
       <div
         className="rounded-2xl overflow-hidden"
         style={{
-          backgroundColor: "#091E46",
-          border: "1px solid rgba(59,130,246,0.22)",
+          backgroundColor: colors.surface,
+          border: `1px solid ${colors.border}`,
           paddingTop: "8px",
         }}
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[560px]">
-            <thead>
-              <tr
-                style={{
-                  backgroundColor: "#120D2A",
-                  borderBottom: "1px solid rgba(70,72,51,0.30)",
-                }}
-              >
-                {["Game", "Category", "Players", "Status"].map((label) => (
-                  <th key={label} className="py-3 px-5" style={headCellStyle}>
-                    {label}
-                  </th>
-                ))}
-                <th className="py-3 px-5 text-right" style={headCellStyle}>
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.loading && (
-                <tr>
-                  <td colSpan={5} className="py-6 px-5 text-sm" style={{ fontFamily: FONT, color: "#6B7280" }}>
-                    Loading games...
-                  </td>
-                </tr>
-              )}
-
-              {!state.loading && state.error && (
-                <tr>
-                  <td colSpan={5} className="py-6 px-5 text-sm" style={{ fontFamily: FONT, color: "#FFB4AB" }}>
-                    {state.error}
-                  </td>
-                </tr>
-              )}
-
-              {!state.loading && !state.error && state.games.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-6 px-5 text-sm" style={{ fontFamily: FONT, color: "#6B7280" }}>
-                    No games found.
-                  </td>
-                </tr>
-              )}
-
-              {state.games.map((g) => (
-                <tr key={g.id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                  <td
-                    className="py-4 px-5"
-                    style={{
-                      fontFamily: FONT,
-                      fontWeight: 700,
-                      fontSize: "16px",
-                      lineHeight: "24px",
-                      color: "#FFFFFF",
-                    }}
-                  >
-                    {g.name}
-                  </td>
-                  <td
-                    className="py-4 px-5"
-                    style={{
-                      fontFamily: FONT,
-                      fontWeight: 400,
-                      fontSize: "16px",
-                      lineHeight: "24px",
-                      color: "#6B7280",
-                    }}
-                  >
-                    {g.categoryName}
-                  </td>
-                  {/* Players aur Status: API mein field nahi hai */}
-                  <td
-                    className="py-4 px-5"
-                    style={{
-                      fontFamily: FONT,
-                      fontWeight: 400,
-                      fontSize: "16px",
-                      lineHeight: "24px",
-                      color: "#6B7280",
-                    }}
-                  >
-                    —
-                  </td>
-                  <td
-                    className="py-4 px-5"
-                    style={{
-                      fontFamily: FONT,
-                      fontWeight: 400,
-                      fontSize: "16px",
-                      lineHeight: "24px",
-                      color: "#6B7280",
-                    }}
-                  >
-                    —
-                  </td>
-                  <td className="py-4 px-5 text-right">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(g)}
-                      className="inline-flex items-center gap-1.5 rounded-lg hover:brightness-110 transition"
-                      style={{
-                        backgroundColor: "#1F2D63",
-                        paddingTop: "6px",
-                        paddingBottom: "6px",
-                        paddingLeft: "16px",
-                        paddingRight: "16px",
-                        fontFamily: FONT,
-                        fontWeight: 700,
-                        fontSize: "16px",
-                        lineHeight: "24px",
-                        color: "#FFFFFF",
-                      }}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          tableClassName="w-full text-left min-w-[560px]"
+          theadRowStyle={{
+            backgroundColor: colors.surfaceElevated,
+            borderBottom: `1px solid ${colors.borderOlive}`,
+          }}
+          columns={gamesColumns}
+          data={state.games}
+          isLoading={state.loading}
+          loadingMessage="Loading games..."
+          isError={Boolean(state.error)}
+          error={state.error}
+          emptyMessage="No games found."
+          divided="top"
+          divider={`1px solid ${colors.borderSubtle}`}
+        />
       </div>
 
       {/* Edit modal: Figma mein is ka design nahi tha, theme ke mutabiq banaya hai */}
       {editing && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+          style={{ backgroundColor: colors.overlay }}
           onClick={closeEdit}
         >
           <form
             onSubmit={handleSave}
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-[560px] max-h-[90vh] overflow-y-auto rounded-2xl p-6"
-            style={{ backgroundColor: "#091E46", border: "1px solid rgba(59,130,246,0.22)" }}
+            style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
           >
             <div className="flex items-start justify-between mb-5">
               <div>
@@ -465,16 +431,16 @@ export default function AdminGames() {
                     fontWeight: 700,
                     fontSize: "20px",
                     lineHeight: "28px",
-                    color: "#D0D0D0",
+                    color: colors.textPrimary,
                   }}
                 >
                   Edit {editing.name}
                 </h2>
-                <p style={{ fontFamily: FONT, fontSize: "13px", color: "#6B7280" }}>
+                <p style={{ fontFamily: FONT, fontSize: "13px", color: colors.textSecondary }}>
                   Khali chhori hui fields update mein shamil nahi hongi.
                 </p>
               </div>
-              <button type="button" onClick={closeEdit} aria-label="Close" style={{ color: "#6B7280" }}>
+              <button type="button" onClick={closeEdit} aria-label="Close" style={{ color: colors.textSecondary }}>
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -545,7 +511,7 @@ export default function AdminGames() {
             </div>
 
             {formError && (
-              <p className="mt-4 text-sm" style={{ fontFamily: FONT, color: "#FFB4AB" }}>
+              <p className="mt-4 text-sm" style={{ fontFamily: FONT, color: colors.dangerSoft }}>
                 {formError}
               </p>
             )}
@@ -557,11 +523,11 @@ export default function AdminGames() {
                 disabled={saving}
                 className="rounded-lg hover:brightness-110 transition"
                 style={{
-                  backgroundColor: "#1F2D63",
+                  backgroundColor: colors.button,
                   fontFamily: FONT,
                   fontWeight: 700,
                   fontSize: "14px",
-                  color: "#FFFFFF",
+                  color: colors.white,
                   padding: "10px 20px",
                 }}
               >
@@ -572,11 +538,11 @@ export default function AdminGames() {
                 disabled={saving}
                 className="rounded-lg hover:brightness-95 transition disabled:opacity-60"
                 style={{
-                  backgroundColor: "#DBE21C",
+                  backgroundColor: colors.primary,
                   fontFamily: FONT,
                   fontWeight: 700,
                   fontSize: "14px",
-                  color: "#1F2544",
+                  color: colors.surfacePanel,
                   padding: "10px 20px",
                 }}
               >

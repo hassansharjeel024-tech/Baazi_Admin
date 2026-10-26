@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Download, RefreshCw, User } from "lucide-react";
 import AdminLayout from "./AdminLayout";
+import DataTable from "./ui/DataTable";
 import totalUsersIcon from "../assets/stat-total-users.png";
 import activeGamesIcon from "../assets/stat-active-games.png";
 import carrotIssuedIcon from "../assets/stat-carrot-issued.png";
 import revenueIcon from "../assets/stat-revenue.png";
-import {
-  useListUserRewardsQuery,
-  useLazyGetUserRewardQuery,
-  USER_REWARD_STATUS,
-} from "../services/api/userRewardApi";
+import { useGetAdminRecentRedemptionsQuery } from "../services/api/userRewardApi";
 import { useListPaymentsQuery, calculateRevenue } from "../services/api/paymentApi";
 import { getErrorMessage } from "../lib/apiHelpers";
+import { colors } from "../theme";
+
+const RECENT_LIMIT = 5;
 
 // Total Users, Active Games, Carrot Issued: in ki API abhi nahi hai, static hain.
 // Revenue ki value API se aati hai (neeche AdminDashboard mein).
@@ -20,8 +21,8 @@ const STATS = [
     label: "Total Users",
     value: "1,284,502",
     icon: totalUsersIcon,
-    accent: "#DBE21C",
-    iconBg: "#DBEE2A1A", // confirmed: #DBEE2A @ 10%
+    accent: colors.primary,
+    iconBg: colors.primaryBg10, // confirmed: colors.primaryBright @ 10%
     bars: [
       { h: 42, o: 0.2 },
       { h: 63, o: 0.2 },
@@ -34,8 +35,8 @@ const STATS = [
     label: "Active Games",
     value: "42,910",
     icon: activeGamesIcon,
-    accent: "#B4C5FF",
-    iconBg: "#0053DB33", // confirmed: #0053DB @ 20%
+    accent: colors.accentSoft,
+    iconBg: colors.accentBg20, // confirmed: colors.accentPrimary @ 20%
     bars: [
       { h: 35, o: 0.2 },
       { h: 59, o: 0.4 },
@@ -48,8 +49,8 @@ const STATS = [
     label: "Carrot Issued",
     value: "2.1 M",
     icon: carrotIssuedIcon,
-    accent: "#DDB8FF",
-    iconBg: "#DDB8FF22", // not yet confirmed from Figma - placeholder
+    accent: colors.chartPurple,
+    iconBg: colors.chartPurpleBg, // not yet confirmed from Figma - placeholder
     bars: [
       { h: 56, o: 0.2 },
       { h: 89, o: 0.4 },
@@ -62,8 +63,8 @@ const STATS = [
     label: "Revenue",
     value: "$0",
     icon: revenueIcon,
-    accent: "#FFB4AB",
-    iconBg: "#FFB4AB22", // not yet confirmed from Figma - placeholder
+    accent: colors.dangerSoft,
+    iconBg: colors.dangerSoftBg10, // not yet confirmed from Figma - placeholder
     bars: [
       { h: 100, o: 0.2 },
       { h: 57, o: 0.4 },
@@ -75,10 +76,10 @@ const STATS = [
 ];
 
 const TOP_GAMES = [
-  { name: "Snake", value: "14.2k", pct: 70, color: "#B4C5FF" },
-  { name: "8 Ball Pool", value: "11.6k", pct: 58, color: "#B4C5FF" },
-  { name: "Bingo Blitz", value: "9.3k", pct: 46, color: "#DBE21C" },
-  { name: "Star Blaster", value: "6.4k", pct: 32, color: "#DDB8FF" },
+  { name: "Snake", value: "14.2k", pct: 70, color: colors.accentSoft },
+  { name: "8 Ball Pool", value: "11.6k", pct: 58, color: colors.accentSoft },
+  { name: "Bingo Blitz", value: "9.3k", pct: 46, color: colors.primary },
+  { name: "Star Blaster", value: "6.4k", pct: 32, color: colors.chartPurple },
 ];
 
 const PLATFORM_BREAKDOWN = [
@@ -88,19 +89,59 @@ const PLATFORM_BREAKDOWN = [
   { label: "Other", pct: 15 },
 ];
 
-// API ke status (Processing / Shipped / Delivered / Cancelled) ke liye colors
 const STATUS_STYLE = {
-  Processing: { bg: "rgba(147,0,10,0.2)", color: "#FFB4AB" },
-  Delivered: { bg: "rgba(219,238,42,0.2)", color: "#DBEE2A" },
-  Shipped: { bg: "rgba(0,83,219,0.2)", color: "#0053DB" },
-  Cancelled: { bg: "rgba(255,255,255,0.1)", color: "#9CA3AF" },
+  PENDING: { bg: colors.warningBg20, color: colors.warning },
+  Pending: { bg: colors.warningBg20, color: colors.warning },
+  Processing: { bg: colors.processingBg, color: colors.dangerSoft },
+  APPROVED: { bg: colors.successBg, color: colors.success },
+  Approved: { bg: colors.successBg, color: colors.success },
+  SHIPPED: { bg: colors.accentBg20, color: colors.accentPrimary },
+  Shipped: { bg: colors.accentBg20, color: colors.accentPrimary },
+  DELIVERED: { bg: colors.primaryBg20, color: colors.primaryBright },
+  Delivered: { bg: colors.primaryBg20, color: colors.primaryBright },
+  REJECTED: { bg: colors.dangerBg20, color: colors.danger },
+  Rejected: { bg: colors.dangerBg20, color: colors.danger },
+  Cancelled: { bg: colors.borderMuted, color: colors.textMuted },
 };
 
-const FALLBACK_STATUS_STYLE = { bg: "rgba(255,255,255,0.1)", color: "#9CA3AF" };
+const FALLBACK_STATUS_STYLE = { bg: colors.borderMuted, color: colors.textMuted };
 
 function formatDate(value) {
   if (!value) return "-";
-  return new Date(value).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function resolveStatusLabel(item) {
+  if (item?.status_label && typeof item.status_label === "string") {
+    return item.status_label;
+  }
+  return "Unknown";
+}
+
+function AvatarImage({ src, alt }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <span
+        className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center"
+        style={{ backgroundColor: colors.buttonAlt, color: colors.primary }}
+        aria-hidden
+      >
+        <User className="w-4 h-4" />
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt || ""}
+      className="w-8 h-8 rounded-full object-cover shrink-0"
+      style={{ backgroundColor: colors.buttonAlt }}
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 function formatRevenue(amount) {
@@ -111,7 +152,7 @@ function StatCard({ label, value, icon, iconBg, bars, accent }) {
   return (
     <div
       className="rounded-xl pt-6 px-6 pb-12 h-[243px]"
-      style={{ backgroundColor: "#091E46", border: "1px solid rgba(59,130,246,0.22)" }}
+      style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
     >
       <div
         className="w-9 h-9 rounded-lg flex items-center justify-center mb-4"
@@ -129,7 +170,7 @@ function StatCard({ label, value, icon, iconBg, bars, accent }) {
           fontWeight: 700,
           fontSize: "28px",
           lineHeight: "42px",
-          color: "#D0D0D0",
+          color: colors.textPrimary,
         }}
       >
         {value}
@@ -181,7 +222,7 @@ function DonutChart({ pct, arcPct = 75 }) {
     fontWeight: 400,
     fontSize: "14px",
     lineHeight: "21px",
-    color: "#D0D0D0",
+    color: colors.textPrimary,
   };
 
   return (
@@ -192,7 +233,7 @@ function DonutChart({ pct, arcPct = 75 }) {
           cy={center}
           r={rOuter}
           fill="none"
-          stroke="#3D465F"
+          stroke={colors.indigoMuted}
           strokeWidth={strokeWidth}
         />
         <circle
@@ -200,7 +241,7 @@ function DonutChart({ pct, arcPct = 75 }) {
           cy={center}
           r={rInner}
           fill="none"
-          stroke="#B4C5FF"
+          stroke={colors.accentSoft}
           strokeWidth={strokeWidth}
           strokeDasharray={`${dashInner} ${circInner - dashInner}`}
           strokeLinecap="butt"
@@ -220,64 +261,31 @@ export default function AdminDashboard() {
     isLoading: paymentsLoading,
     isError: paymentsIsError,
   } = useListPaymentsQuery();
-  const {
-    data: userRewardsData,
-    isLoading: rewardsLoading,
-    isError: rewardsIsError,
-    error: rewardsError,
-  } = useListUserRewardsQuery();
-  const [fetchUserReward] = useLazyGetUserRewardQuery();
 
-  const [redemptionItems, setRedemptionItems] = useState([]);
-  const [enriching, setEnriching] = useState(false);
+  const {
+    data: recentItems,
+    isLoading: recentLoading,
+    isFetching: recentFetching,
+    isError: recentIsError,
+    error: recentError,
+    refetch: refetchRecent,
+  } = useGetAdminRecentRedemptionsQuery({ limit: RECENT_LIMIT });
 
   const revenueValue = useMemo(
     () => (payments ? calculateRevenue(payments) : 0),
     [payments]
   );
 
-  useEffect(() => {
-    const rewards = userRewardsData?.rewards;
-    if (!rewards) return undefined;
-
-    let cancelled = false;
-    setEnriching(true);
-
-    async function enrich() {
-      const latest = [...rewards]
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .slice(0, 5);
-
-      const items = await Promise.all(
-        latest.map(async (r) => {
-          try {
-            const full = await fetchUserReward(r.id).unwrap();
-            return { ...r, user: full?.user };
-          } catch {
-            return r;
-          }
-        })
-      );
-
-      if (!cancelled) {
-        setRedemptionItems(items);
-        setEnriching(false);
-      }
-    }
-
-    enrich();
-    return () => {
-      cancelled = true;
-    };
-  }, [userRewardsData, fetchUserReward]);
-
-  const displayRedemptionItems = userRewardsData?.rewards ? redemptionItems : [];
-
   const revenueLoading = paymentsLoading;
   const revenueError = paymentsIsError;
-  const redemptionsLoading = rewardsLoading || enriching;
-  const redemptionsError = rewardsIsError
-    ? getErrorMessage(rewardsError, "Failed to load redemptions")
+
+  const items = recentItems ?? [];
+  const showRecentSkeleton = recentLoading && !recentItems;
+  const showRecentHardError = recentIsError && !recentItems;
+  const showRecentSoftError = recentIsError && Boolean(recentItems);
+  const showRecentEmpty = !recentLoading && !recentIsError && recentItems && items.length === 0;
+  const recentErrorMessage = recentIsError
+    ? getErrorMessage(recentError, "Unable to load recent redemptions. Please try again.")
     : "";
 
   const revenueText = revenueLoading
@@ -286,11 +294,98 @@ export default function AdminDashboard() {
       ? "--"
       : formatRevenue(revenueValue);
   const stats = STATS.map((s) => (s.label === "Revenue" ? { ...s, value: revenueText } : s));
-  const redemptions = {
-    loading: redemptionsLoading,
-    error: redemptionsError,
-    items: displayRedemptionItems,
-  };
+
+  const recentColumns = useMemo(
+    () => [
+      {
+        key: "user",
+        header: "User",
+        headerClassName: "pl-8",
+        cellClassName: "pl-8",
+        skeletonWidth: "70%",
+        render: (r) => {
+          const userName = r.user?.display_name || r.user?.username || "—";
+          return (
+            <div className="flex items-center gap-3 min-w-0">
+              <AvatarImage src={r.user?.avatar?.image} alt={userName} />
+              <div className="min-w-0 flex flex-col">
+                <span
+                  className="truncate"
+                  style={{
+                    fontFamily: "'Montserrat', sans-serif",
+                    fontWeight: 400,
+                    fontSize: "14px",
+                    lineHeight: "21px",
+                    color: colors.textPrimary,
+                  }}
+                >
+                  {userName}
+                </span>
+                {r.request_id && (
+                  <span className="truncate text-[11px]" style={{ color: colors.textSecondary }}>
+                    {r.request_id}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        key: "reward",
+        header: "Reward",
+        cellClassName: "text-sm",
+        cellStyle: { color: colors.textPrimary },
+        skeletonWidth: "45%",
+        render: (r) => r.reward?.name || "-",
+      },
+      {
+        key: "carrots",
+        header: "Carrots",
+        cellClassName: "text-sm font-bold",
+        cellStyle: { color: colors.textPrimary },
+        skeletonWidth: "45%",
+        render: (r) => {
+          const carrots = Number(r.carrots ?? r.reward?.carrot ?? 0);
+          return Number.isFinite(carrots) ? carrots.toLocaleString() : "-";
+        },
+      },
+      {
+        key: "status",
+        header: "Status",
+        skeletonWidth: "45%",
+        render: (r) => {
+          const statusLabel = resolveStatusLabel(r);
+          const statusStyle = STATUS_STYLE[statusLabel] || FALLBACK_STATUS_STYLE;
+          return (
+            <span
+              className="px-2 py-[2.5px] rounded text-[10px] font-bold uppercase"
+              style={{
+                backgroundColor: statusStyle.bg,
+                color: statusStyle.color,
+                fontFamily: "'Montserrat', sans-serif",
+                lineHeight: "15px",
+                letterSpacing: "0px",
+              }}
+            >
+              {String(statusLabel).toUpperCase()}
+            </span>
+          );
+        },
+      },
+      {
+        key: "date",
+        header: "Date",
+        headerClassName: "pr-8 text-right",
+        cellClassName: "pr-8 text-right text-sm",
+        cellStyle: { color: colors.textPrimary },
+        align: "right",
+        skeletonWidth: "45%",
+        render: (r) => formatDate(r.created_at),
+      },
+    ],
+    []
+  );
 
   return (
     <AdminLayout>
@@ -305,9 +400,9 @@ export default function AdminDashboard() {
           <button
             className="flex items-center gap-2 text-sm font-bold px-6 py-2.5 rounded-full hover:brightness-95 transition"
             style={{
-              backgroundColor: "#DBE21C",
-              color: "#1F2544",
-              boxShadow: "0px 0px 15px 0px rgba(221,238,42,0.15)",
+              backgroundColor: colors.primary,
+              color: colors.surfacePanel,
+              boxShadow: `0px 0px 15px 0px ${colors.primaryGlow}`,
             }}
           >
             <Download className="w-4 h-4" />
@@ -324,7 +419,7 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div
             className="lg:col-span-2 rounded-xl pt-8 px-8 pb-24"
-            style={{ backgroundColor: "#091E46", border: "1px solid rgba(59,130,246,0.22)" }}
+            style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
           >
             <h2
               className="mb-6"
@@ -333,7 +428,7 @@ export default function AdminDashboard() {
                 fontWeight: 600,
                 fontSize: "18px",
                 lineHeight: "24px",
-                color: "#D0D0D0",
+                color: colors.textPrimary,
               }}
             >
               Top games by players
@@ -344,7 +439,7 @@ export default function AdminDashboard() {
                   <span className="text-white/60 text-xs w-24 shrink-0">{g.name}</span>
                   <div
                     className="flex-1 h-2 rounded-full overflow-hidden"
-                    style={{ backgroundColor: "#334A74" }}
+                    style={{ backgroundColor: colors.indigo }}
                   >
                     <div
                       className="h-full rounded-full"
@@ -358,7 +453,7 @@ export default function AdminDashboard() {
                       fontWeight: 500,
                       fontSize: "16px",
                       lineHeight: "24px",
-                      color: "#D0D0D0",
+                      color: colors.textPrimary,
                     }}
                   >
                     {g.value}
@@ -370,7 +465,7 @@ export default function AdminDashboard() {
 
           <div
             className="rounded-xl p-8"
-            style={{ backgroundColor: "#091E46", border: "1px solid rgba(59,130,246,0.22)" }}
+            style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
           >
             <h2
               className="mb-6"
@@ -379,7 +474,7 @@ export default function AdminDashboard() {
                 fontWeight: 600,
                 fontSize: "18px",
                 lineHeight: "24px",
-                color: "#D0D0D0",
+                color: colors.textPrimary,
               }}
             >
               Platform breakdown
@@ -394,7 +489,7 @@ export default function AdminDashboard() {
                       fontWeight: 500,
                       fontSize: "16px",
                       lineHeight: "24px",
-                      color: "#6B7280",
+                      color: colors.textSecondary,
                     }}
                   >
                     {seg.label}
@@ -405,7 +500,7 @@ export default function AdminDashboard() {
                       fontWeight: 500,
                       fontSize: "16px",
                       lineHeight: "24px",
-                      color: "#D0D0D0",
+                      color: colors.textPrimary,
                     }}
                   >
                     {seg.pct}%
@@ -418,7 +513,7 @@ export default function AdminDashboard() {
 
         <div
           className="rounded-xl overflow-hidden"
-          style={{ backgroundColor: "#091E46", border: "1px solid rgba(59,130,246,0.22)" }}
+          style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
         >
           <div className="flex items-center justify-between p-8">
             <div>
@@ -428,7 +523,7 @@ export default function AdminDashboard() {
                   fontWeight: 600,
                   fontSize: "18px",
                   lineHeight: "24px",
-                  color: "#D0D0D0",
+                  color: colors.textPrimary,
                 }}
               >
                 Recent Redemptions
@@ -440,141 +535,88 @@ export default function AdminDashboard() {
                   fontWeight: 500,
                   fontSize: "16px",
                   lineHeight: "24px",
-                  color: "#6B7280",
+                  color: colors.textSecondary,
                 }}
               >
                 Latest withdrawal and prize claim requests
               </p>
             </div>
 
-            <button
-              type="button"
+            <Link
+              to="/admin/redemptions"
               className="hover:underline"
               style={{
                 fontFamily: "'Montserrat', sans-serif",
                 fontWeight: 500,
                 fontSize: "16px",
                 lineHeight: "24px",
-                color: "#DBE21C",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
+                color: colors.primary,
               }}
             >
               View All Redemptions
-            </button>
+            </Link>
           </div>
 
-          <table className="w-full table-fixed text-left">
-            <colgroup>
-              <col style={{ width: "28%" }} />
-              <col style={{ width: "25%" }} />
-              <col style={{ width: "18%" }} />
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "14%" }} />
-            </colgroup>
-            <thead>
-              <tr
-                className="text-white/35 text-[11px] uppercase"
-                style={{
-                  backgroundColor: "#120D2A",
-                  height: "57px",
-                  borderBottom: "1px solid rgba(59,130,246,0.22)",
-                }}
+          {showRecentSoftError && (
+            <div
+              className="mx-8 mb-4 rounded-lg px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm"
+              role="status"
+              style={{
+                color: colors.warning,
+                backgroundColor: colors.warningBg10,
+                border: `1px solid ${colors.warningBg25}`,
+              }}
+            >
+              <span>Recent redemptions couldn’t refresh. Showing the last loaded results.</span>
+              <button
+                type="button"
+                onClick={() => refetchRecent()}
+                disabled={recentFetching}
+                className="inline-flex items-center gap-2 font-bold hover:underline disabled:opacity-60 shrink-0"
+                style={{ color: colors.warning }}
               >
-                <th className="pl-8 font-medium">User</th>
-                <th className="font-medium">Reward</th>
-                <th className="font-medium">Carrots</th>
-                <th className="font-medium">Status</th>
-                <th className="pr-8 text-right font-medium">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {redemptions.loading && (
-                <tr style={{ height: "65px" }}>
-                  <td colSpan={5} className="pl-8 text-sm" style={{ color: "#6B7280" }}>
-                    Loading redemptions...
-                  </td>
-                </tr>
-              )}
+                <RefreshCw className={`w-3.5 h-3.5 ${recentFetching ? "animate-spin" : ""}`} aria-hidden />
+                {recentFetching ? "Refreshing…" : "Retry"}
+              </button>
+            </div>
+          )}
 
-              {!redemptions.loading && redemptions.error && (
-                <tr style={{ height: "65px" }}>
-                  <td colSpan={5} className="pl-8 text-sm" style={{ color: "#FFB4AB" }}>
-                    {redemptions.error}
-                  </td>
-                </tr>
-              )}
-
-              {!redemptions.loading && !redemptions.error && redemptions.items.length === 0 && (
-                <tr style={{ height: "65px" }}>
-                  <td colSpan={5} className="pl-8 text-sm" style={{ color: "#6B7280" }}>
-                    No redemptions yet.
-                  </td>
-                </tr>
-              )}
-
-              {redemptions.items.map((r, i) => {
-                const statusLabel = USER_REWARD_STATUS[r.status] || "Unknown";
-                const statusStyle = STATUS_STYLE[statusLabel] || FALLBACK_STATUS_STYLE;
-                const userName =
-                  r.user?.display_name || r.user?.username || `User #${r.user_id}`;
-
-                return (
-                  <tr
-                    key={r.id}
-                    style={{
-                      height: "65px",
-                      borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)",
-                    }}
-                  >
-                    <td className="pl-8">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className="w-8 h-8 rounded-full shrink-0"
-                          style={{ backgroundColor: "#1F2C73" }}
-                        />
-                        <span
-                          style={{
-                            fontFamily: "'Montserrat', sans-serif",
-                            fontWeight: 400,
-                            fontSize: "14px",
-                            lineHeight: "21px",
-                            color: "#D0D0D0",
-                          }}
-                        >
-                          {userName}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="text-sm" style={{ color: "#D0D0D0" }}>
-                      {r.reward?.name || "-"}
-                    </td>
-                    <td className="text-sm font-bold" style={{ color: "#D0D0D0" }}>
-                      {Number(r.reward?.carrot || 0).toLocaleString()}
-                    </td>
-                    <td>
-                      <span
-                        className="px-2 py-[2.5px] rounded text-[10px] font-bold uppercase"
-                        style={{
-                          backgroundColor: statusStyle.bg,
-                          color: statusStyle.color,
-                          fontFamily: "'Montserrat', sans-serif",
-                          lineHeight: "15px",
-                          letterSpacing: "0px",
-                        }}
-                      >
-                        {statusLabel.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="pr-8 text-right text-sm" style={{ color: "#D0D0D0" }}>
-                      {formatDate(r.created_at)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div
+            style={{
+              opacity: recentFetching && recentItems && !recentIsError ? 0.85 : 1,
+              transition: "opacity 160ms ease",
+            }}
+          >
+            <DataTable
+              scrollable={false}
+              tableClassName="w-full table-fixed text-left"
+              theadRowStyle={{
+                backgroundColor: colors.surfaceElevated,
+                height: "57px",
+                borderBottom: `1px solid ${colors.border}`,
+              }}
+              colgroup={["28%", "25%", "18%", "15%", "14%"]}
+              columns={recentColumns}
+              data={showRecentHardError ? [] : items}
+              isLoading={showRecentSkeleton}
+              skeletonRows={RECENT_LIMIT}
+              skeletonRowStyle={{ height: "65px" }}
+              skeletonDivider={`1px solid ${colors.borderSubtle}`}
+              isError={showRecentHardError}
+              error={recentErrorMessage}
+              errorTitle="Couldn’t load recent redemptions"
+              onRetry={() => refetchRecent()}
+              isRetrying={recentFetching}
+              showEmpty={showRecentEmpty}
+              emptyMessage="No recent redemptions yet."
+              emptyClassName="pl-8 text-sm"
+              emptyStyle={{ color: colors.textSecondary }}
+              emptyRowStyle={{ height: "65px" }}
+              divided="top"
+              divider={`1px solid ${colors.borderSubtle}`}
+              rowStyle={{ height: "65px" }}
+            />
+          </div>
         </div>
       </div>
     </AdminLayout>
