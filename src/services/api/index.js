@@ -7,5 +7,6 @@ import "./rewardCategoryApi";
 import "./userRewardApi";
 import "./coinPackageApi";
 import "./paymentApi";
+import "./adminUserApi";
 
 export { baseApi } from "./baseApi";
