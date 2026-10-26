@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Download, ChevronDown, ChevronLeft, ChevronRight, User } from "lucide-react";
 import AdminLayout from "./AdminLayout";
-import { listPayments } from "../services/paymentService";
-import { getCoinPackages } from "../services/coinPackageService";
-import { listUserRewards } from "../services/userRewardService";
+import { useListPaymentsQuery } from "../services/api/paymentApi";
+import { useGetCoinPackagesQuery } from "../services/api/coinPackageApi";
+import { useListUserRewardsQuery } from "../services/api/userRewardApi";
+import { getErrorMessage } from "../lib/apiHelpers";
 
 const PAGE_SIZE = 4;
 
@@ -117,46 +118,34 @@ const PAGE_BTN =
   "h-[34px] min-w-[30px] px-3 rounded-[4px] border flex items-center justify-center font-['Montserrat'] font-medium text-xs transition";
 
 export default function AdminWallet() {
-  const [data, setData] = useState({
-    loading: true,
-    payments: null,
-    rewards: null,
-    packages: [],
-    errors: [],
-  });
+  const {
+    data: payments = null,
+    isLoading: paymentsLoading,
+    isError: paymentsIsError,
+    error: paymentsError,
+  } = useListPaymentsQuery();
+  const {
+    data: claimsData,
+    isLoading: rewardsLoading,
+    isError: rewardsIsError,
+    error: rewardsError,
+  } = useListUserRewardsQuery();
+  const { data: packages = [], isLoading: packagesLoading } = useGetCoinPackagesQuery();
+
+  const data = {
+    loading: paymentsLoading || rewardsLoading || packagesLoading,
+    payments: paymentsIsError ? null : payments,
+    rewards: rewardsIsError ? null : (claimsData?.rewards ?? null),
+    packages,
+    errors: [
+      ...(paymentsIsError ? [getErrorMessage(paymentsError, "Failed to load payments")] : []),
+      ...(rewardsIsError ? [getErrorMessage(rewardsError, "Failed to load redemptions")] : []),
+    ],
+  };
+
   const [typeFilter, setTypeFilter] = useState("all");
   const [periodFilter, setPeriodFilter] = useState("all");
   const [page, setPage] = useState(1);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      const [payRes, rewRes, pkgRes] = await Promise.allSettled([
-        listPayments(),
-        listUserRewards(),
-        getCoinPackages(),
-      ]);
-      if (cancelled) return;
-
-      const errors = [];
-      if (payRes.status === "rejected") errors.push(payRes.reason?.message || "Failed to load payments");
-      if (rewRes.status === "rejected") errors.push(rewRes.reason?.message || "Failed to load redemptions");
-
-      setData({
-        loading: false,
-        payments: payRes.status === "fulfilled" ? payRes.value : null,
-        rewards: rewRes.status === "fulfilled" ? rewRes.value.rewards : null,
-        packages: pkgRes.status === "fulfilled" ? pkgRes.value : [],
-        errors,
-      });
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // ---- live stat cards ----
   const liveValues = useMemo(() => {

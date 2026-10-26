@@ -1,6 +1,3 @@
-// Backend ka response { success, message, data } ki shakal mein aata hai
-export const unwrap = (res) => res?.data?.data;
-
 // Khali values ko hata deta hai
 export function compact(obj = {}) {
   return Object.fromEntries(
@@ -18,4 +15,7 @@ export function toFormData(values = {}) {
   return fd;
 }
 
-export const MULTIPART = { headers: { "Content-Type": "multipart/form-data" } };
+/** Normalize RTK Query / unwrap() errors to a user-facing message. */
+export function getErrorMessage(err, fallback = "Something went wrong. Please try again.") {
+  return err?.message || err?.data?.message || err?.data?.error || err?.error || fallback;
+}

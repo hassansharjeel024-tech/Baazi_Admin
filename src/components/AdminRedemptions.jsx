@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { PlusCircle, ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import {
-  listUserRewards,
-  getUserReward,
-  updateUserRewardStatus,
-} from "../services/userRewardService";
-import { getRewards } from "../services/rewardService";
+  useListUserRewardsQuery,
+  useLazyGetUserRewardQuery,
+  useUpdateUserRewardStatusMutation,
+} from "../services/api/userRewardApi";
+import { useGetRewardsQuery } from "../services/api/rewardApi";
+import { getErrorMessage } from "../lib/apiHelpers";
 
 const FONT = "'Montserrat', sans-serif";
 const PAGE_SIZE = 5;
@@ -100,7 +101,35 @@ function DetailRow({ label, value }) {
 export default function AdminRedemptions() {
   const navigate = useNavigate();
 
-  const [state, setState] = useState({ loading: true, error: "", items: [], rewards: [] });
+  const {
+    data: claimsData,
+    isLoading: claimsLoading,
+    isError: claimsIsError,
+    error: claimsError,
+  } = useListUserRewardsQuery();
+  const { data: rewardsList = [] } = useGetRewardsQuery();
+  const [fetchUserReward] = useLazyGetUserRewardQuery();
+  const [updateStatus] = useUpdateUserRewardStatusMutation();
+
+  // Optimistic local status overrides until cache refetch lands
+  const [statusOverrides, setStatusOverrides] = useState({});
+
+  const items = useMemo(() => {
+    if (!claimsData?.rewards) return [];
+    return [...claimsData.rewards]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .map((r) =>
+        statusOverrides[r.id] !== undefined ? { ...r, status: statusOverrides[r.id] } : r
+      );
+  }, [claimsData, statusOverrides]);
+
+  const state = {
+    loading: claimsLoading,
+    error: claimsIsError ? getErrorMessage(claimsError, "Failed to load redemptions") : "",
+    items,
+    rewards: rewardsList,
+  };
+
   const [filter, setFilter] = useState("");
   const [page, setPage] = useState(1);
   const [users, setUsers] = useState({}); // id -> user object, ya false agar load na ho saka
@@ -108,41 +137,6 @@ export default function AdminRedemptions() {
   const [notice, setNotice] = useState({ type: "", text: "" });
   const [detail, setDetail] = useState(null);
   const requestedUsers = useRef(new Set());
-
-  // ---- data load ----
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      const [claimsRes, rewardsRes] = await Promise.allSettled([listUserRewards(), getRewards()]);
-      if (cancelled) return;
-
-      if (claimsRes.status === "rejected") {
-        setState({
-          loading: false,
-          error: claimsRes.reason?.message || "Failed to load redemptions",
-          items: [],
-          rewards: [],
-        });
-        return;
-      }
-
-      const items = [...claimsRes.value.rewards].sort(
-        (a, b) => new Date(b.created_at) - new Date(a.created_at)
-      );
-      setState({
-        loading: false,
-        error: "",
-        items,
-        rewards: rewardsRes.status === "fulfilled" ? rewardsRes.value : [],
-      });
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // ---- derived data ----
   const stats = useMemo(() => {
@@ -182,11 +176,12 @@ export default function AdminRedemptions() {
     pageItems.forEach((r) => {
       if (requestedUsers.current.has(r.id)) return;
       requestedUsers.current.add(r.id);
-      getUserReward(r.id)
+      fetchUserReward(r.id)
+        .unwrap()
         .then((full) => setUsers((u) => ({ ...u, [r.id]: full?.user || false })))
         .catch(() => setUsers((u) => ({ ...u, [r.id]: false })));
     });
-  }, [pageItems]);
+  }, [pageItems, fetchUserReward]);
 
   function userLabel(item) {
     const u = users[item.id];
@@ -200,14 +195,11 @@ export default function AdminRedemptions() {
     setActingId(item.id);
     setNotice({ type: "", text: "" });
     try {
-      await updateUserRewardStatus(item.id, status);
-      setState((s) => ({
-        ...s,
-        items: s.items.map((r) => (r.id === item.id ? { ...r, status } : r)),
-      }));
+      await updateStatus({ id: item.id, status }).unwrap();
+      setStatusOverrides((prev) => ({ ...prev, [item.id]: status }));
       setNotice({ type: "success", text: successText });
     } catch (err) {
-      setNotice({ type: "error", text: err?.message || "Failed to update status" });
+      setNotice({ type: "error", text: getErrorMessage(err, "Failed to update status") });
     } finally {
       setActingId(null);
     }
@@ -221,10 +213,15 @@ export default function AdminRedemptions() {
   async function openDetail(item) {
     setDetail({ id: item.id, loading: true, error: "", data: null });
     try {
-      const data = await getUserReward(item.id);
+      const data = await fetchUserReward(item.id).unwrap();
       setDetail({ id: item.id, loading: false, error: "", data });
     } catch (err) {
-      setDetail({ id: item.id, loading: false, error: err?.message || "Failed to load details", data: null });
+      setDetail({
+        id: item.id,
+        loading: false,
+        error: getErrorMessage(err, "Failed to load details"),
+        data: null,
+      });
     }
   }
 

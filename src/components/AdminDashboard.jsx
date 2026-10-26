@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import totalUsersIcon from "../assets/stat-total-users.png";
@@ -6,11 +6,12 @@ import activeGamesIcon from "../assets/stat-active-games.png";
 import carrotIssuedIcon from "../assets/stat-carrot-issued.png";
 import revenueIcon from "../assets/stat-revenue.png";
 import {
-  listUserRewards,
-  getUserReward,
+  useListUserRewardsQuery,
+  useLazyGetUserRewardQuery,
   USER_REWARD_STATUS,
-} from "../services/userRewardService";
-import { listPayments, calculateRevenue } from "../services/paymentService";
+} from "../services/api/userRewardApi";
+import { useListPaymentsQuery, calculateRevenue } from "../services/api/paymentApi";
+import { getErrorMessage } from "../lib/apiHelpers";
 
 // Total Users, Active Games, Carrot Issued: in ki API abhi nahi hai, static hain.
 // Revenue ki value API se aati hai (neeche AdminDashboard mein).
@@ -214,70 +215,82 @@ function DonutChart({ pct, arcPct = 75 }) {
 }
 
 export default function AdminDashboard() {
-  const [revenue, setRevenue] = useState({ loading: true, error: "", value: 0 });
-  const [redemptions, setRedemptions] = useState({ loading: true, error: "", items: [] });
+  const {
+    data: payments,
+    isLoading: paymentsLoading,
+    isError: paymentsIsError,
+  } = useListPaymentsQuery();
+  const {
+    data: userRewardsData,
+    isLoading: rewardsLoading,
+    isError: rewardsIsError,
+    error: rewardsError,
+  } = useListUserRewardsQuery();
+  const [fetchUserReward] = useLazyGetUserRewardQuery();
+
+  const [redemptionItems, setRedemptionItems] = useState([]);
+  const [enriching, setEnriching] = useState(false);
+
+  const revenueValue = useMemo(
+    () => (payments ? calculateRevenue(payments) : 0),
+    [payments]
+  );
 
   useEffect(() => {
+    const rewards = userRewardsData?.rewards;
+    if (!rewards) return undefined;
+
     let cancelled = false;
+    setEnriching(true);
 
-    async function loadRevenue() {
-      try {
-        const payments = await listPayments();
-        console.log("payments:", payments);
-        if (!cancelled) {
-          setRevenue({ loading: false, error: "", value: calculateRevenue(payments) });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setRevenue({ loading: false, error: err?.message || "Failed to load revenue", value: 0 });
-        }
+    async function enrich() {
+      const latest = [...rewards]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 5);
+
+      const items = await Promise.all(
+        latest.map(async (r) => {
+          try {
+            const full = await fetchUserReward(r.id).unwrap();
+            return { ...r, user: full?.user };
+          } catch {
+            return r;
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setRedemptionItems(items);
+        setEnriching(false);
       }
     }
 
-    async function loadRedemptions() {
-      try {
-        const { rewards } = await listUserRewards();
-        console.log("rewards:", rewards);
-
-        // Sab se naye 5
-        const latest = [...rewards]
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-          .slice(0, 5);
-
-        // List mein user ka naam nahi hota, is liye har ek ka detail laate hain
-        const items = await Promise.all(
-          latest.map(async (r) => {
-            try {
-              const full = await getUserReward(r.id);
-              return { ...r, user: full?.user };
-            } catch {
-              return r;
-            }
-          })
-        );
-
-        if (!cancelled) setRedemptions({ loading: false, error: "", items });
-      } catch (err) {
-        if (!cancelled) {
-          setRedemptions({
-            loading: false,
-            error: err?.message || "Failed to load redemptions",
-            items: [],
-          });
-        }
-      }
-    }
-
-    loadRevenue();
-    loadRedemptions();
-
+    enrich();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userRewardsData, fetchUserReward]);
 
-  const revenueText = revenue.loading ? "..." : revenue.error ? "--" : formatRevenue(revenue.value);
+  const displayRedemptionItems = userRewardsData?.rewards ? redemptionItems : [];
+
+  const revenueLoading = paymentsLoading;
+  const revenueError = paymentsIsError;
+  const redemptionsLoading = rewardsLoading || enriching;
+  const redemptionsError = rewardsIsError
+    ? getErrorMessage(rewardsError, "Failed to load redemptions")
+    : "";
+
+  const revenueText = revenueLoading
+    ? "..."
+    : revenueError
+      ? "--"
+      : formatRevenue(revenueValue);
   const stats = STATS.map((s) => (s.label === "Revenue" ? { ...s, value: revenueText } : s));
+  const redemptions = {
+    loading: redemptionsLoading,
+    error: redemptionsError,
+    items: displayRedemptionItems,
+  };
 
   return (
     <AdminLayout>

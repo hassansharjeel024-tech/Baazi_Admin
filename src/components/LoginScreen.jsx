@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
-import { login } from "../services/authService";
+import { useLoginMutation } from "../services/api/authApi";
+import { getErrorMessage } from "../lib/apiHelpers";
 
 function LoginScreen() {
   const navigate = useNavigate();
+  const [login, { isLoading: isSubmitting }] = useLoginMutation();
   const [showPassword, setShowPassword] = useState(false);
   const [rememberSession, setRememberSession] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
@@ -21,14 +22,11 @@ function LoginScreen() {
       return;
     }
 
-    setIsSubmitting(true);
     try {
-      await login({ email, password });
+      await login({ email, password }).unwrap();
       navigate("/admin/dashboard");
     } catch (err) {
-      setError(err?.message || "Login failed. Please check your credentials.");
-    } finally {
-      setIsSubmitting(false);
+      setError(getErrorMessage(err, "Login failed. Please check your credentials."));
     }
   }
 

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Gamepad2, Trophy, Pencil, X } from "lucide-react";
 import AdminLayout from "./AdminLayout";
-import { getGames, updateGame } from "../services/gameService";
+import { useLazyGetGamesQuery, useUpdateGameMutation } from "../services/api/gameApi";
+import { getErrorMessage } from "../lib/apiHelpers";
 
 const FONT = "'Montserrat', sans-serif";
 
@@ -68,25 +69,27 @@ function Field({ label, children, full }) {
 }
 
 export default function AdminGames() {
+  const [fetchGames] = useLazyGetGamesQuery();
+  const [updateGame, { isLoading: saving }] = useUpdateGameMutation();
+
   const [state, setState] = useState({ loading: true, error: "", games: [], categories: [] });
   const [notice, setNotice] = useState("");
 
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [imageFile, setImageFile] = useState(null);
-  const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
   const loadGames = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: "" }));
     try {
       // 1) saari games + categories ki list
-      const base = await getGames();
+      const base = await fetchGames().unwrap();
       const categories = (base?.category || []).filter((c) => c.id !== 0);
 
       // 2) list mein game ki category nahi aati, is liye har category ke filter se match karte hain
       const results = await Promise.allSettled(
-        categories.map((c) => getGames({ category_id: c.id }))
+        categories.map((c) => fetchGames({ category_id: c.id }).unwrap())
       );
       const categoryByGame = {};
       results.forEach((res, i) => {
@@ -107,12 +110,12 @@ export default function AdminGames() {
     } catch (err) {
       setState({
         loading: false,
-        error: err?.message || "Failed to load games",
+        error: getErrorMessage(err, "Failed to load games"),
         games: [],
         categories: [],
       });
     }
-  }, []);
+  }, [fetchGames]);
 
   useEffect(() => {
     loadGames();
@@ -140,20 +143,17 @@ export default function AdminGames() {
   async function handleSave(e) {
     e.preventDefault();
     setFormError("");
-    setSaving(true);
     try {
       // khali fields toFormData khud hata deta hai, is liye sirf bhare hue fields jaate hain
       const values = { ...form };
       if (imageFile) values.image = imageFile;
 
-      await updateGame(editing.id, values);
+      await updateGame({ id: editing.id, values }).unwrap();
       setEditing(null);
       setNotice(`"${form.name || editing.name}" updated successfully.`);
       await loadGames();
     } catch (err) {
-      setFormError(err?.message || "Failed to update game");
-    } finally {
-      setSaving(false);
+      setFormError(getErrorMessage(err, "Failed to update game"));
     }
   }
 

@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Gift, CalendarCheck, Pencil, CirclePlus, UploadCloud } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import addRewardIcon from "../assets/add-reward-icon.png";
-import { getRewards, createReward, updateReward } from "../services/rewardService";
-import { getRewardCategories } from "../services/rewardCategoryService";
-import { listUserRewards } from "../services/userRewardService";
+import {
+  useGetRewardsQuery,
+  useCreateRewardMutation,
+  useUpdateRewardMutation,
+} from "../services/api/rewardApi";
+import { useGetRewardCategoriesQuery } from "../services/api/rewardCategoryApi";
+import { useListUserRewardsQuery } from "../services/api/userRewardApi";
+import { getErrorMessage } from "../lib/apiHelpers";
 
 const EMPTY_FORM = {
   name: "",
@@ -44,55 +49,39 @@ function fieldStyle() {
 }
 
 export default function AdminRewards() {
-  const [state, setState] = useState({
-    loading: true,
-    error: "",
-    rewards: [],
-    categories: [],
-    claims: null, // null = claims load nahi hue
-  });
-  const [notice, setNotice] = useState("");
+  const {
+    data: rewards = [],
+    isLoading: rewardsLoading,
+    isError: rewardsIsError,
+    error: rewardsError,
+    refetch: refetchRewards,
+  } = useGetRewardsQuery();
+  const { data: categories = [] } = useGetRewardCategoriesQuery();
+  const { data: claimsData } = useListUserRewardsQuery();
+  const claims = claimsData?.rewards ?? null;
 
+  const [createReward, { isLoading: creating }] = useCreateRewardMutation();
+  const [updateReward, { isLoading: updating }] = useUpdateRewardMutation();
+  const saving = creating || updating;
+
+  const [notice, setNotice] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
   const [imageFile, setImageFile] = useState(null);
   const [dragOver, setDragOver] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
   const formRef = useRef(null);
   const nameRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  const loadAll = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: "" }));
-
-    const [rewardsRes, categoriesRes, claimsRes] = await Promise.allSettled([
-      getRewards(),
-      getRewardCategories(),
-      listUserRewards(),
-    ]);
-
-    const categories = categoriesRes.status === "fulfilled" ? categoriesRes.value : [];
-    const claims = claimsRes.status === "fulfilled" ? claimsRes.value.rewards : null;
-
-    if (rewardsRes.status === "rejected") {
-      setState({
-        loading: false,
-        error: rewardsRes.reason?.message || "Failed to load rewards",
-        rewards: [],
-        categories,
-        claims,
-      });
-      return;
-    }
-
-    setState({ loading: false, error: "", rewards: rewardsRes.value, categories, claims });
-  }, []);
-
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+  const state = {
+    loading: rewardsLoading,
+    error: rewardsIsError ? getErrorMessage(rewardsError, "Failed to load rewards") : "",
+    rewards,
+    categories,
+    claims,
+  };
 
   // ---- derived numbers ----
   const claimedByReward = {};
@@ -162,7 +151,6 @@ export default function AdminRewards() {
       return;
     }
 
-    setSaving(true);
     try {
       // khali fields toFormData khud hata deta hai
       const values = {
@@ -176,19 +164,17 @@ export default function AdminRewards() {
       if (imageFile) values.image = imageFile;
 
       if (editingId) {
-        await updateReward(editingId, values);
+        await updateReward({ id: editingId, values }).unwrap();
         setNotice(`"${values.name}" updated successfully.`);
       } else {
-        await createReward(values);
+        await createReward(values).unwrap();
         setNotice(`"${values.name}" created successfully.`);
       }
 
       resetForm();
-      await loadAll();
+      refetchRewards();
     } catch (err) {
-      setFormError(err?.message || "Something went wrong. Please try again.");
-    } finally {
-      setSaving(false);
+      setFormError(getErrorMessage(err));
     }
   }
 
