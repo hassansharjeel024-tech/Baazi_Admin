@@ -1,61 +1,80 @@
-import { apiSlice } from "./apiSlice";
-import { setCredentials } from "../../features/auth/authSlice";
+import { compact } from "../../lib/apiHelpers";
+import { baseApi } from "./baseApi";
 
-export const authApi = apiSlice.injectEndpoints({
+const TOKEN_KEY = "baazi_admin_token";
+const USER_KEY = "baazi_admin_user";
+
+export const authApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     login: builder.mutation({
-      queryFn: async (body, _api, _extra, baseQuery) => {
-        const result = await baseQuery({ url: "/auth/v1/login", method: "POST", body });
-        if (result.error) return result;
+      async queryFn({ email, password }, _api, _extra, baseQuery) {
+        const result = await baseQuery({
+          url: "/auth/v1/login",
+          method: "POST",
+          body: { email, password },
+        });
 
-        const payload = result.data?.data;
-        const token = payload?.access_token;
-        const user = payload?.user;
+        if (result.error) return { error: result.error };
+
+        const token = result.data?.data?.access_token;
+        const user = result.data?.data?.user;
 
         if (!token) {
           return {
             error: {
-              status: 400,
-              data: { message: result.data?.message || "Login failed. Please try again." },
+              status: 500,
+              message: "Login succeeded but no token was returned by the API.",
             },
           };
         }
+
         if (user?.role !== "admin") {
           return {
-            error: { status: 403, data: { message: "This account doesn't have admin access." } },
+            error: {
+              status: 403,
+              message: "This account doesn't have admin access.",
+            },
           };
         }
+
+        localStorage.setItem(TOKEN_KEY, token);
+        if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+
         return { data: { token, user } };
-      },
-      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
-        try {
-          const { data } = await queryFulfilled;
-          dispatch(setCredentials(data));
-        } catch {
-          /* error component mein .unwrap() se handle hoga */
-        }
       },
     }),
 
     checkUsername: builder.mutation({
-      query: (username) => ({
-        url: "/auth/v1/check-username",
-        method: "POST",
-        body: { username },
-      }),
-      transformResponse: (res) => ({ available: res?.success === true, message: res?.message }),
+      async queryFn(username, _api, _extra, baseQuery) {
+        const result = await baseQuery({
+          url: "/auth/v1/check-username",
+          method: "POST",
+          body: { username },
+        });
+
+        if (result.error) {
+          if (result.error.status === 400 || result.error.status === 409) {
+            return {
+              data: { available: false, message: result.error.message || "" },
+            };
+          }
+          return { error: result.error };
+        }
+
+        return {
+          data: {
+            available: result.data?.success === true,
+            message: result.data?.message || "",
+          },
+        };
+      },
     }),
 
     signup: builder.mutation({
       query: ({ username, email, password, referral_code }) => ({
         url: "/auth/v1/signup",
         method: "POST",
-        body: {
-          username,
-          email,
-          password,
-          ...(referral_code ? { referral_code } : {}),
-        },
+        body: compact({ username, email, password, referral_code }),
       }),
     }),
 
@@ -63,7 +82,15 @@ export const authApi = apiSlice.injectEndpoints({
       query: ({ email, verification_code }) => ({
         url: "/auth/v1/verify-email",
         method: "POST",
-        body: { email, verification_code: Number(verification_code) },
+        body: {
+          email,
+          verification_code: Number(verification_code),
+        },
+      }),
+      transformResponse: (response) => ({
+        message: response?.message,
+        token: response?.data?.access_token,
+        user: response?.data?.user,
       }),
     }),
 
@@ -71,12 +98,12 @@ export const authApi = apiSlice.injectEndpoints({
       query: ({ step, email, verification_code, password }) => ({
         url: "/auth/v1/forget-password",
         method: "POST",
-        body: {
+        body: compact({
           step,
           email,
-          ...(verification_code ? { verification_code: String(verification_code) } : {}),
-          ...(password ? { password } : {}),
-        },
+          verification_code: verification_code ? String(verification_code) : undefined,
+          password,
+        }),
       }),
     }),
   }),

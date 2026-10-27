@@ -3,29 +3,31 @@ import { useNavigate } from "react-router-dom";
 import { PlusCircle, ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import {
-  listUserRewards,
-  getUserReward,
-  updateUserRewardStatus,
-} from "../services/userRewardService";
-import { getRewards } from "../services/rewardService";
+  useListUserRewardsQuery,
+  useLazyGetUserRewardQuery,
+  useUpdateUserRewardStatusMutation,
+} from "../services/api/userRewardApi";
+import { useGetRewardsQuery } from "../services/api/rewardApi";
+import { getErrorMessage } from "../lib/apiHelpers";
+import { colors } from "../theme";
 
 const FONT = "'Montserrat', sans-serif";
 const PAGE_SIZE = 5;
 
 const C = {
-  card: "#091E46",
-  border: "rgba(59,130,246,0.22)",
-  bar: "#120D2A",
-  headerLine: "#464833",
-  rowLine: "rgba(59,130,246,0.12)",
-  text: "#DEE2F5",
-  primary: "#D0D0D0",
-  grey: "#6B7280",
-  lime: "#DBEE2A",
-  yellow: "#DBE21C",
-  navy: "#091E46",
-  slate: "#26346E",
-  pageBorder: "rgba(222,226,245,0.5)",
+  card: colors.surface,
+  border: colors.border,
+  bar: colors.surfaceElevated,
+  headerLine: colors.borderOliveSolid,
+  rowLine: colors.borderSoft,
+  text: colors.textLight,
+  primary: colors.textPrimary,
+  grey: colors.textSecondary,
+  lime: colors.primaryBright,
+  yellow: colors.primary,
+  navy: colors.surface,
+  slate: colors.buttonStrong,
+  pageBorder: colors.textLight50,
 };
 
 const HEADERS = ["Request ID", "User", "Reward", "Carrots", "Submitted", "Status", "Actions"];
@@ -34,12 +36,12 @@ const HEADERS = ["Request ID", "User", "Reward", "Carrots", "Submitted", "Status
 const STATUS_LABEL = { 1: "Pending", 2: "Shipped", 3: "Delivered", 4: "Rejected" };
 
 const STATUS_STYLE = {
-  Pending: { bg: "rgba(255,141,88,0.2)", color: "#FF8D58" },
-  Shipped: { bg: "rgba(59,130,246,0.3)", color: "#BFD4FF" },
-  Delivered: { bg: "rgba(120,255,71,0.2)", color: "#DBEE2A" },
-  Rejected: { bg: "rgba(255,97,97,0.2)", color: "#FF6161" },
+  Pending: { bg: colors.warningBg20, color: colors.warning },
+  Shipped: { bg: colors.borderStrong, color: colors.accentMuted },
+  Delivered: { bg: colors.successBg, color: colors.primaryBright },
+  Rejected: { bg: colors.dangerBg20, color: colors.danger },
 };
-const FALLBACK_STYLE = { bg: "rgba(255,255,255,0.1)", color: "#9CA3AF" };
+const FALLBACK_STYLE = { bg: colors.borderMuted, color: colors.textMuted };
 
 const ACTION_BTN = "h-7 px-3 rounded text-[13px] font-bold text-white transition hover:brightness-125 disabled:opacity-50";
 
@@ -100,7 +102,35 @@ function DetailRow({ label, value }) {
 export default function AdminRedemptions() {
   const navigate = useNavigate();
 
-  const [state, setState] = useState({ loading: true, error: "", items: [], rewards: [] });
+  const {
+    data: claimsData,
+    isLoading: claimsLoading,
+    isError: claimsIsError,
+    error: claimsError,
+  } = useListUserRewardsQuery();
+  const { data: rewardsList = [] } = useGetRewardsQuery();
+  const [fetchUserReward] = useLazyGetUserRewardQuery();
+  const [updateStatus] = useUpdateUserRewardStatusMutation();
+
+  // Optimistic local status overrides until cache refetch lands
+  const [statusOverrides, setStatusOverrides] = useState({});
+
+  const items = useMemo(() => {
+    if (!claimsData?.rewards) return [];
+    return [...claimsData.rewards]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .map((r) =>
+        statusOverrides[r.id] !== undefined ? { ...r, status: statusOverrides[r.id] } : r
+      );
+  }, [claimsData, statusOverrides]);
+
+  const state = {
+    loading: claimsLoading,
+    error: claimsIsError ? getErrorMessage(claimsError, "Failed to load redemptions") : "",
+    items,
+    rewards: rewardsList,
+  };
+
   const [filter, setFilter] = useState("");
   const [page, setPage] = useState(1);
   const [users, setUsers] = useState({}); // id -> user object, ya false agar load na ho saka
@@ -108,41 +138,6 @@ export default function AdminRedemptions() {
   const [notice, setNotice] = useState({ type: "", text: "" });
   const [detail, setDetail] = useState(null);
   const requestedUsers = useRef(new Set());
-
-  // ---- data load ----
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      const [claimsRes, rewardsRes] = await Promise.allSettled([listUserRewards(), getRewards()]);
-      if (cancelled) return;
-
-      if (claimsRes.status === "rejected") {
-        setState({
-          loading: false,
-          error: claimsRes.reason?.message || "Failed to load redemptions",
-          items: [],
-          rewards: [],
-        });
-        return;
-      }
-
-      const items = [...claimsRes.value.rewards].sort(
-        (a, b) => new Date(b.created_at) - new Date(a.created_at)
-      );
-      setState({
-        loading: false,
-        error: "",
-        items,
-        rewards: rewardsRes.status === "fulfilled" ? rewardsRes.value : [],
-      });
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // ---- derived data ----
   const stats = useMemo(() => {
@@ -182,11 +177,12 @@ export default function AdminRedemptions() {
     pageItems.forEach((r) => {
       if (requestedUsers.current.has(r.id)) return;
       requestedUsers.current.add(r.id);
-      getUserReward(r.id)
+      fetchUserReward(r.id)
+        .unwrap()
         .then((full) => setUsers((u) => ({ ...u, [r.id]: full?.user || false })))
         .catch(() => setUsers((u) => ({ ...u, [r.id]: false })));
     });
-  }, [pageItems]);
+  }, [pageItems, fetchUserReward]);
 
   function userLabel(item) {
     const u = users[item.id];
@@ -200,14 +196,11 @@ export default function AdminRedemptions() {
     setActingId(item.id);
     setNotice({ type: "", text: "" });
     try {
-      await updateUserRewardStatus(item.id, status);
-      setState((s) => ({
-        ...s,
-        items: s.items.map((r) => (r.id === item.id ? { ...r, status } : r)),
-      }));
+      await updateStatus({ id: item.id, status }).unwrap();
+      setStatusOverrides((prev) => ({ ...prev, [item.id]: status }));
       setNotice({ type: "success", text: successText });
     } catch (err) {
-      setNotice({ type: "error", text: err?.message || "Failed to update status" });
+      setNotice({ type: "error", text: getErrorMessage(err, "Failed to update status") });
     } finally {
       setActingId(null);
     }
@@ -221,10 +214,15 @@ export default function AdminRedemptions() {
   async function openDetail(item) {
     setDetail({ id: item.id, loading: true, error: "", data: null });
     try {
-      const data = await getUserReward(item.id);
+      const data = await fetchUserReward(item.id).unwrap();
       setDetail({ id: item.id, loading: false, error: "", data });
     } catch (err) {
-      setDetail({ id: item.id, loading: false, error: err?.message || "Failed to load details", data: null });
+      setDetail({
+        id: item.id,
+        loading: false,
+        error: getErrorMessage(err, "Failed to load details"),
+        data: null,
+      });
     }
   }
 
@@ -235,10 +233,10 @@ export default function AdminRedemptions() {
   const to = Math.min(safePage * PAGE_SIZE, filtered.length);
 
   const statCards = [
-    { label: "Total Requests", value: stats.total, color: "#FFFFFF" },
-    { label: "Pending", value: stats.pending, color: "#FF8D58" },
-    { label: "Approved", value: stats.approved, color: "#78FF47" },
-    { label: "Rejected", value: stats.rejected, color: "#FF6161" },
+    { label: "Total Requests", value: stats.total, color: colors.white },
+    { label: "Pending", value: stats.pending, color: colors.warning },
+    { label: "Approved", value: stats.approved, color: colors.success },
+    { label: "Rejected", value: stats.rejected, color: colors.danger },
   ];
 
   return (
@@ -260,7 +258,7 @@ export default function AdminRedemptions() {
             style={{
               backgroundColor: C.yellow,
               color: C.navy,
-              boxShadow: "0 0 15px rgba(221,238,42,0.15)",
+              boxShadow: `0 0 15px ${colors.primaryGlow}`,
             }}
           >
             <PlusCircle className="w-5 h-5" />
@@ -275,13 +273,13 @@ export default function AdminRedemptions() {
               notice.type === "success"
                 ? {
                     color: C.lime,
-                    backgroundColor: "rgba(219,238,42,0.1)",
-                    border: "1px solid rgba(219,238,42,0.2)",
+                    backgroundColor: colors.primaryBg10,
+                    border: `1px solid ${colors.primaryBg20}`,
                   }
                 : {
-                    color: "#FF6161",
-                    backgroundColor: "rgba(255,97,97,0.1)",
-                    border: "1px solid rgba(255,97,97,0.25)",
+                    color: colors.danger,
+                    backgroundColor: colors.dangerBg10,
+                    border: `1px solid ${colors.dangerBg25}`,
                   }
             }
           >
@@ -324,7 +322,7 @@ export default function AdminRedemptions() {
                   setFilter(e.target.value);
                   setPage(1);
                 }}
-                className="appearance-none w-[145px] h-[38px] pl-4 pr-10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                className="appearance-none w-[145px] h-[38px] pl-4 pr-10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-bright"
                 style={{
                   backgroundColor: C.bar,
                   border: `1px solid ${C.border}`,
@@ -375,7 +373,7 @@ export default function AdminRedemptions() {
 
                 {!state.loading && state.error && (
                   <tr className="h-[81px]">
-                    <td colSpan={7} className="pl-6 text-sm" style={{ color: "#FF6161" }}>
+                    <td colSpan={7} className="pl-6 text-sm" style={{ color: colors.danger }}>
                       {state.error}
                     </td>
                   </tr>
@@ -495,7 +493,7 @@ export default function AdminRedemptions() {
       {detail && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: "rgba(0,0,0,0.6)", fontFamily: FONT }}
+          style={{ backgroundColor: colors.overlay, fontFamily: FONT }}
           onClick={() => setDetail(null)}
         >
           <div
@@ -518,7 +516,7 @@ export default function AdminRedemptions() {
               </p>
             )}
             {detail.error && (
-              <p className="text-sm" style={{ color: "#FF6161" }}>
+              <p className="text-sm" style={{ color: colors.danger }}>
                 {detail.error}
               </p>
             )}

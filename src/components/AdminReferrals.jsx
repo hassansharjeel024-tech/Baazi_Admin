@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Download,
   Settings2,
@@ -6,6 +6,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
+import DataTable from "./ui/DataTable";
 
 // Top referrers photos (circular)
 import topNeonracer from "../assets/topref-neonracer.png";
@@ -18,6 +19,7 @@ import logNeonracer from "../assets/avatar-neonracer.png";
 import logAliKhan from "../assets/avatar-ali-khan.png";
 import logMohsinRiaz from "../assets/avatar-mohsin-riaz.png";
 import logVoidx from "../assets/avatar-voidx.png";
+import { colors } from "../theme";
 
 // Top referrers photo size in px (change here if it doesn't match Figma)
 const TOPREF_AVATAR_SIZE = 32;
@@ -55,17 +57,17 @@ const SETTINGS = [
 ];
 
 // Figma-confirmed colors
-const CARD_BG = "#091E46";
-const CARD_BORDER = "rgba(59,130,246,0.22)"; // #3B82F6 @ 22%
-const TEXT_MUTED = "#D0D0D0";
-const TEXT_LIGHT = "#DEE2F5"; // table row text
-const TEXT_GREY = "#6B7280"; // last activity dates
-const ACCENT = "#DBEE2A"; // Figma text accent on this screen
-const TABLE_HEAD_BG = "#120D2A";
-const BUTTON_BORDER = "#FDFFEA";
-const CODE_CHIP_BG = "#090E1B";
-const AVATAR_BG = "#252A38";
-const AVATAR_BORDER = "#242B3D";
+const CARD_BG = colors.surface;
+const CARD_BORDER = colors.border; // colors.accent @ 22%
+const TEXT_MUTED = colors.textPrimary;
+const TEXT_LIGHT = colors.textLight; // table row text
+const TEXT_GREY = colors.textSecondary; // last activity dates
+const ACCENT = colors.primaryBright; // Figma text accent on this screen
+const TABLE_HEAD_BG = colors.surfaceElevated;
+const BUTTON_BORDER = colors.primaryPale;
+const CODE_CHIP_BG = colors.backgroundInk;
+const AVATAR_BG = colors.surfaceMuted;
+const AVATAR_BORDER = colors.borderMid;
 
 const FONT_MONT = { fontFamily: "'Montserrat', sans-serif" };
 const FONT_JAKARTA = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
@@ -76,11 +78,6 @@ const cardStyle = {
 };
 
 const thStyle = {
-  fontWeight: 500,
-  fontSize: 16,
-  lineHeight: "24px",
-  textTransform: "uppercase",
-  color: TEXT_MUTED,
   padding: "16px 24px",
   textAlign: "left",
   borderBottom: `1px solid ${CARD_BORDER}`,
@@ -124,7 +121,7 @@ const logNameStyle = {
   fontWeight: 700,
   fontSize: 16,
   lineHeight: "24px",
-  color: "#FFFFFF",
+  color: colors.white,
 };
 
 const logCountStyle = {
@@ -147,13 +144,161 @@ const logDateStyle = {
   textAlign: "right",
 };
 
-function rowBorder(i) {
-  return i === 0 ? {} : { borderTop: `1px solid ${CARD_BORDER}` };
-}
-
 export default function AdminReferrals() {
   const [page, setPage] = useState(1);
   const totalPages = 2;
+
+  const topReferrerColumns = useMemo(
+    () => [
+      {
+        key: "user",
+        header: "USER",
+        headerStyle: { ...thStyle, width: "100%" },
+        cellStyle: { padding: "16px 24px" },
+        render: (row) => (
+          <div className="flex items-center gap-3">
+            <img
+              src={row.photo}
+              alt={row.user}
+              className="rounded-full object-cover shrink-0"
+              style={{
+                width: TOPREF_AVATAR_SIZE,
+                height: TOPREF_AVATAR_SIZE,
+                backgroundColor: AVATAR_BG,
+              }}
+            />
+            <span style={nameStyle}>{row.user}</span>
+          </div>
+        ),
+      },
+      {
+        key: "referred",
+        header: "REFERRED",
+        headerStyle: numThStyle,
+        cellClassName: "text-right",
+        cellStyle: numCellStyle,
+        accessor: "referred",
+      },
+      {
+        key: "joined",
+        header: "JOINED",
+        headerStyle: numThStyle,
+        cellClassName: "text-right",
+        cellStyle: numCellStyle,
+        accessor: "joined",
+      },
+      {
+        key: "earned",
+        header: "EARNED",
+        headerStyle: numThStyle,
+        cellClassName: "text-right",
+        cellStyle: earnedCellStyle,
+        accessor: "earned",
+      },
+    ],
+    []
+  );
+
+  const activityColumns = useMemo(
+    () => [
+      {
+        key: "referrer",
+        header: "REFERRER",
+        headerStyle: { ...thStyle, width: "20.7%" },
+        cellStyle: { padding: "16px 24px" },
+        render: (row) => (
+          <div className="flex items-center gap-3">
+            <img
+              src={row.avatar}
+              alt={row.referrer}
+              className="shrink-0"
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 4,
+                backgroundColor: AVATAR_BG,
+                border: `1px solid ${AVATAR_BORDER}`,
+              }}
+            />
+            <div className="min-w-0">
+              <p style={logNameStyle}>{row.referrer}</p>
+              <p style={{ fontSize: 14, lineHeight: "24px", color: TEXT_GREY }}>{row.tier}</p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "code",
+        header: (
+          <>
+            REFERRAL
+            <br />
+            CODE
+          </>
+        ),
+        headerStyle: { ...thStyle, width: "18.2%" },
+        cellStyle: { padding: "16px 24px" },
+        render: (row) => (
+          <span
+            className="inline-flex items-center rounded"
+            style={{
+              padding: "2.5px 12px",
+              backgroundColor: CODE_CHIP_BG,
+              border: `1px solid ${CARD_BORDER}`,
+              color: ACCENT,
+              fontWeight: 500,
+              fontSize: 16,
+              lineHeight: "24px",
+            }}
+          >
+            {row.code}
+          </span>
+        ),
+      },
+      {
+        key: "invited",
+        header: "INVITED",
+        headerStyle: { ...thStyle, width: "12.4%", textAlign: "center" },
+        cellStyle: logCountStyle,
+        accessor: "invited",
+      },
+      {
+        key: "joined",
+        header: "JOINED",
+        headerStyle: { ...thStyle, width: "11.5%", textAlign: "center" },
+        cellStyle: logCountStyle,
+        accessor: "joined",
+      },
+      {
+        key: "earned",
+        header: (
+          <>
+            CARROTS
+            <br />
+            EARNED
+          </>
+        ),
+        headerStyle: { ...thStyle, width: "18.7%", textAlign: "right" },
+        cellClassName: "text-right",
+        cellStyle: earnedCellStyle,
+        accessor: "earned",
+      },
+      {
+        key: "lastActivity",
+        header: (
+          <>
+            LAST
+            <br />
+            ACTIVITY
+          </>
+        ),
+        headerStyle: { ...thStyle, width: "18.5%", textAlign: "right" },
+        cellStyle: logDateStyle,
+        accessor: "lastActivity",
+      },
+    ],
+    []
+  );
 
   return (
     <AdminLayout>
@@ -186,17 +331,17 @@ export default function AdminReferrals() {
             className="flex items-center rounded-lg"
             style={{
               ...FONT_JAKARTA,
-              backgroundColor: "#1F2D63",
+              backgroundColor: colors.button,
               border: `1px solid ${CARD_BORDER}`,
               padding: "10px 33.64px 10px 24px",
               gap: "17.62px",
               fontWeight: 600,
               fontSize: 16,
               lineHeight: "24px",
-              color: "#DEE2F5",
+              color: colors.textLight,
             }}
           >
-            <Download size={16} color="#DEE2F5" />
+            <Download size={16} color={colors.textLight} />
             Export Data
           </button>
         </div>
@@ -227,7 +372,7 @@ export default function AdminReferrals() {
                   fontWeight: 700,
                   fontSize: 32,
                   lineHeight: "48px",
-                  color: "#FFFFFF",
+                  color: colors.white,
                 }}
               >
                 {card.value}
@@ -251,12 +396,12 @@ export default function AdminReferrals() {
                   fontWeight: 600,
                   fontSize: 18,
                   lineHeight: "24px",
-                  color: "#FFFFFF",
+                  color: colors.white,
                 }}
               >
                 Referral program settings
               </h2>
-              <Settings2 size={18} color="#C7C8AD" />
+              <Settings2 size={18} color={colors.primaryMuted} />
             </div>
 
             <div className="flex-1" style={{ padding: "20px 24px 0 24px" }}>
@@ -337,7 +482,7 @@ export default function AdminReferrals() {
                   fontWeight: 700,
                   fontSize: 16,
                   lineHeight: "24px",
-                  color: "#FFFFFF",
+                  color: colors.white,
                 }}
               >
                 Edit settings
@@ -359,7 +504,7 @@ export default function AdminReferrals() {
                   fontWeight: 600,
                   fontSize: 18,
                   lineHeight: "24px",
-                  color: "#FFFFFF",
+                  color: colors.white,
                 }}
               >
                 Top referrers
@@ -375,46 +520,16 @@ export default function AdminReferrals() {
                 View all
               </button>
             </div>
-            <table className="w-full">
-              <thead>
-                <tr style={{ backgroundColor: TABLE_HEAD_BG }}>
-                  <th style={{ ...thStyle, width: "100%" }}>USER</th>
-                  <th style={numThStyle}>REFERRED</th>
-                  <th style={numThStyle}>JOINED</th>
-                  <th style={numThStyle}>EARNED</th>
-                </tr>
-              </thead>
-              <tbody>
-                {TOP_REFERRERS.map((row, i) => (
-                  <tr key={row.user} style={rowBorder(i)}>
-                    <td style={{ padding: "16px 24px" }}>
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={row.photo}
-                          alt={row.user}
-                          className="rounded-full object-cover shrink-0"
-                          style={{
-                            width: TOPREF_AVATAR_SIZE,
-                            height: TOPREF_AVATAR_SIZE,
-                            backgroundColor: AVATAR_BG,
-                          }}
-                        />
-                        <span style={nameStyle}>{row.user}</span>
-                      </div>
-                    </td>
-                    <td className="text-right" style={numCellStyle}>
-                      {row.referred}
-                    </td>
-                    <td className="text-right" style={numCellStyle}>
-                      {row.joined}
-                    </td>
-                    <td className="text-right" style={earnedCellStyle}>
-                      {row.earned}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              scrollable={false}
+              tableClassName="w-full"
+              theadRowStyle={{ backgroundColor: TABLE_HEAD_BG }}
+              columns={topReferrerColumns}
+              data={TOP_REFERRERS}
+              getRowKey={(row) => row.user}
+              divided="top"
+              divider={`1px solid ${CARD_BORDER}`}
+            />
           </div>
         </div>
 
@@ -431,101 +546,22 @@ export default function AdminReferrals() {
                 fontWeight: 600,
                 fontSize: 18,
                 lineHeight: "24px",
-                color: "#FFFFFF",
+                color: colors.white,
               }}
             >
               Referral activity log
             </h2>
           </div>
-          <div className="overflow-x-auto">
-            <table
-              className="w-full"
-              style={{ tableLayout: "fixed", minWidth: 900 }}
-            >
-              <thead>
-                <tr style={{ backgroundColor: TABLE_HEAD_BG }}>
-                  <th style={{ ...thStyle, width: "20.7%" }}>REFERRER</th>
-                  <th style={{ ...thStyle, width: "18.2%" }}>
-                    REFERRAL
-                    <br />
-                    CODE
-                  </th>
-                  <th style={{ ...thStyle, width: "12.4%", textAlign: "center" }}>
-                    INVITED
-                  </th>
-                  <th style={{ ...thStyle, width: "11.5%", textAlign: "center" }}>
-                    JOINED
-                  </th>
-                  <th style={{ ...thStyle, width: "18.7%", textAlign: "right" }}>
-                    CARROTS
-                    <br />
-                    EARNED
-                  </th>
-                  <th style={{ ...thStyle, width: "18.5%", textAlign: "right" }}>
-                    LAST
-                    <br />
-                    ACTIVITY
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {ACTIVITY_LOG.map((row, i) => (
-                  <tr key={row.code} style={rowBorder(i)}>
-                    <td style={{ padding: "16px 24px" }}>
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={row.avatar}
-                          alt={row.referrer}
-                          className="shrink-0"
-                          style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: 4,
-                            backgroundColor: AVATAR_BG,
-                            border: `1px solid ${AVATAR_BORDER}`,
-                          }}
-                        />
-                        <div className="min-w-0">
-                          <p style={logNameStyle}>{row.referrer}</p>
-                          <p
-                            style={{
-                              fontSize: 14,
-                              lineHeight: "24px",
-                              color: TEXT_GREY,
-                            }}
-                          >
-                            {row.tier}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: "16px 24px" }}>
-                      <span
-                        className="inline-flex items-center rounded"
-                        style={{
-                          padding: "2.5px 12px",
-                          backgroundColor: CODE_CHIP_BG,
-                          border: `1px solid ${CARD_BORDER}`,
-                          color: ACCENT,
-                          fontWeight: 500,
-                          fontSize: 16,
-                          lineHeight: "24px",
-                        }}
-                      >
-                        {row.code}
-                      </span>
-                    </td>
-                    <td style={logCountStyle}>{row.invited}</td>
-                    <td style={logCountStyle}>{row.joined}</td>
-                    <td className="text-right" style={earnedCellStyle}>
-                      {row.earned}
-                    </td>
-                    <td style={logDateStyle}>{row.lastActivity}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableClassName="w-full"
+            tableStyle={{ tableLayout: "fixed", minWidth: 900 }}
+            theadRowStyle={{ backgroundColor: TABLE_HEAD_BG }}
+            columns={activityColumns}
+            data={ACTIVITY_LOG}
+            getRowKey={(row) => row.code}
+            divided="top"
+            divider={`1px solid ${CARD_BORDER}`}
+          />
 
           {/* Footer: count + numbered pagination */}
           <div
@@ -561,7 +597,7 @@ export default function AdminReferrals() {
                   className="w-8 h-8 rounded flex items-center justify-center text-sm font-medium"
                   style={
                     n === page
-                      ? { backgroundColor: ACCENT, color: "#1F2544" }
+                      ? { backgroundColor: ACCENT, color: colors.surfacePanel }
                       : { border: `1px solid ${CARD_BORDER}`, color: TEXT_LIGHT }
                   }
                 >
