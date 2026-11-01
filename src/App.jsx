@@ -7,6 +7,7 @@ import AdminGames from "./components/AdminGames";
 import AdminRewards from "./components/AdminRewards";
 import AdminRedemptions from "./components/AdminRedemptions";
 import AdminWallet from "./components/AdminWallet";
+import AdminPackages from "./components/AdminPackages";
 import AdminReferrals from "./components/AdminReferrals";
 import { isAuthenticated } from "./services/authService";
 
@@ -83,6 +84,14 @@ function App() {
         element={
           <ProtectedRoute>
             <AdminWallet />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/packages"
+        element={
+          <ProtectedRoute>
+            <AdminPackages />
           </ProtectedRoute>
         }
       />
