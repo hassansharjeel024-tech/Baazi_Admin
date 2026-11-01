@@ -37,17 +37,17 @@ function LoginScreen() {
       className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden"
       style={{
         backgroundColor: colors.background,
-        backgroundImage: `linear-gradient(180deg, ${colors.background} 0%, ${colors.accent} 100%)`,
+        backgroundImage: `linear-gradient(180deg, ${colors.background} 0%, #23447D 100%)`,
       }}
     >
       {/* Dot texture overlay — CSS-generated, fades out vertically like the Figma asset */}
     {/* Dot texture overlay */}
-      <div
+            <div
         className="absolute inset-0 pointer-events-none"
         style={{
           backgroundImage:
-            `radial-gradient(${colors.borderWhite18} 1.5px, transparent 1.5px)`,
-          backgroundSize: "27px 27px",
+            "radial-gradient(circle, rgba(255,255,255,0.05) 2.75px, transparent 3.25px)",
+          backgroundSize: "16px 16px",
           WebkitMaskImage:
             "linear-gradient(to bottom, black 0%, black 10%, transparent 55%)",
           maskImage:
