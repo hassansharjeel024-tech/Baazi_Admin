@@ -17,6 +17,7 @@ import navRewardsActive from "../assets/nav-rewards-active.png";
 import navRedemptionsActive from "../assets/nav-redemptions-active.png";
 import navWalletActive from "../assets/nav-wallet-active.png";
 import navReferralsActive from "../assets/nav-referrals-active.png";
+import navPackagesActive from "../assets/nav-packages-active.png";
 import { Search, Bell, HelpCircle } from "lucide-react";
 import logo from "../assets/logo.png";
 import { colors } from "../theme";
@@ -28,7 +29,7 @@ const NAV_ITEMS = [
   { label: "Rewards", icon: navRewards, iconActive: navRewardsActive, path: "/admin/rewards" },
   { label: "Redemptions", icon: navRedemptions, iconActive: navRedemptionsActive, path: "/admin/redemptions" },
   { label: "Wallet", icon: navWallet, iconActive: navWalletActive, path: "/admin/wallet" },
-  { label: "Packages", icon: navPackages, path: "/admin/packages" },
+    { label: "Packages", icon: navPackages, iconActive: navPackagesActive, path: "/admin/packages" },
   { label: "Referrals", icon: navReferrals, iconActive: navReferralsActive, path: "/admin/referrals" },
   { label: "Settings", icon: navSettings, path: "/admin/settings" },
 ];
@@ -177,26 +178,28 @@ export default function AdminLayout({ children }) {
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <Topbar />
-        <main
-          className="flex-1 overflow-y-auto relative"
-          style={{
-            backgroundColor: colors.background,
-            backgroundImage: `linear-gradient(180deg, ${colors.background} 0%, ${colors.accent} 100%)`,
-          }}
+               <main
+          className="flex-1 overflow-y-auto relative flex flex-col"
+          style={{ backgroundColor: "#0F111A" }}
         >
+          {/* Figma: Subtle Background Elements = blue grad (#0F111A -> #3B82F6) poori page ki height par */}
           <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              backgroundImage: `radial-gradient(${colors.loginDot} 1.5px, transparent 1.5px)`,
-              backgroundSize: "27px 27px",
-              WebkitMaskImage:
-                "linear-gradient(to bottom, black 0%, black 10%, transparent 55%)",
-              maskImage:
-                "linear-gradient(to bottom, black 0%, black 10%, transparent 55%)",
-            }}
-          />
-
-          <div className="relative z-10 p-10 max-w-[1440px] mx-auto">{children}</div>
+            className="relative flex-1"
+             style={{ backgroundImage: "linear-gradient(180deg, #121827 0%, #23447D 100%)" }}
+          >
+          <div
+  className="absolute inset-0 pointer-events-none"
+  style={{
+    backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.05) 2.75px, transparent 3.25px)`,
+backgroundSize: "16px 16px",
+    WebkitMaskImage:
+      "linear-gradient(to bottom, black 0px, black 80px, transparent 460px)",
+    maskImage:
+      "linear-gradient(to bottom, black 0px, black 80px, transparent 460px)",
+  }}
+/>
+            <div className="relative z-10 p-10 max-w-[1440px] mx-auto">{children}</div>
+          </div>
         </main>
       </div>
     </div>

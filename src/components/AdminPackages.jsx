@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   CirclePlus,
   LayoutGrid,
@@ -14,34 +14,42 @@ import {
 import AdminLayout from "./AdminLayout";
 import totalSalesIcon from "../assets/packages-total-sales-icon.png";
 import carrotsIssuedIcon from "../assets/packages-carrots-issued-icon.png";
+import packCoinImage from "../assets/pack-coin.png";
 import {
-  getCoinPackages,
-  createCoinPackage,
-  updateCoinPackage,
-} from "../services/coinPackageService";
-import { listPayments } from "../services/paymentService";
+  useGetCoinPackagesQuery,
+  useCreateCoinPackageMutation,
+  useUpdateCoinPackageMutation,
+} from "../services/api/coinPackageApi";
+import { useListPaymentsQuery } from "../services/api/paymentApi";
 
 const FONT = "'Montserrat', sans-serif";
-const PAGE_SIZE = 5;
+const JAKARTA = "'Plus Jakarta Sans', sans-serif";
+const PAGE_SIZE = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const EMPTY_LIST = [];
+const MAX_PACK_CARDS = 3;
 
-// Figma se andaze se liye gaye colors: inspect se verify karein
+// Figma ki coin image: teenon pack cards mein yehi dikhegi
+const PACK_IMAGE = packCoinImage;
+
 const C = {
   card: "#091E46",
   border: "rgba(59,130,246,0.22)",
   bar: "#120D2A",
   field: "#0B1330",
-  imageBg: "#0A1738",
+  imageBg: "#252A38",
   rowLine: "rgba(59,130,246,0.12)",
   pageBorder: "#303443",
   primary: "#D0D0D0",
   text: "#DEE2F5",
   grey: "#6B7280",
+  muted: "#C7C8AD", // Figma: ID / CARROTS / PRICE labels
   lime: "#DBEE2A",
   yellow: "#DBE21C",
   navy: "#091E46",
-  btn: "#252A38",
+  btn: "#303443", // Figma: pack card Edit button fill
   danger: "#FF6161",
+  dangerSoft: "#FFB4AB", // Figma: delete button border/icon
 };
 
 const EMPTY_FORM = {
@@ -52,6 +60,17 @@ const EMPTY_FORM = {
   price: "",
   bonus_percentage: "",
 };
+
+// RTK Query ke error se readable message nikalne ke liye
+function getErrMsg(err, fallback = "Something went wrong. Please try again.") {
+  return (
+    err?.data?.message ||
+    err?.data?.error ||
+    err?.message ||
+    (typeof err?.error === "string" ? err.error : "") ||
+    fallback
+  );
+}
 
 function formatPrice(price, currency = "usd") {
   const n = Number(price || 0).toLocaleString("en-US", {
@@ -86,14 +105,37 @@ const inputStyle = {
   outline: "none",
 };
 
+// Label style (Figma): Montserrat 500, 12/16, tracking 0.6px, uppercase
 const labelStyle = {
   fontFamily: FONT,
   fontWeight: 500,
   fontSize: "12px",
   lineHeight: "16px",
-  letterSpacing: "1.2px",
+  letterSpacing: "0.6px",
   textTransform: "uppercase",
   color: C.grey,
+};
+
+// Pack card ke labels (Figma): Montserrat 500, 16/24, uppercase, #C7C8AD
+const packLabelStyle = {
+  fontFamily: FONT,
+  fontWeight: 500,
+  fontSize: "16px",
+  lineHeight: "24px",
+  letterSpacing: "0px",
+  textTransform: "uppercase",
+  color: C.muted,
+};
+
+// Table header (Figma): Montserrat 500, 16/24, uppercase, #D0D0D0
+const thStyle = {
+  fontFamily: FONT,
+  fontWeight: 500,
+  fontSize: "16px",
+  lineHeight: "24px",
+  letterSpacing: "0px",
+  textTransform: "uppercase",
+  color: C.primary,
 };
 
 function Field({ label, children, full }) {
@@ -108,13 +150,13 @@ function Field({ label, children, full }) {
 function StatCard({ icon, tag, tagBg, tagColor, label, value }) {
   return (
     <div
-       className="rounded-xl p-6 flex flex-col justify-between h-[192px]"
+      className="rounded-xl p-6 flex flex-col justify-between h-[192px]"
       style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}
     >
       <div className="flex items-center justify-between">
-         <img src={icon} alt="" className="w-6 h-6" />
+        <img src={icon} alt="" className="w-6 h-6" />
         <span
-                  className="px-2 py-1 rounded text-xs leading-4 font-medium uppercase tracking-[0.6px]"
+          className="px-2 py-1 rounded text-xs leading-4 font-medium uppercase tracking-[0.6px]"
           style={{ backgroundColor: tagBg, color: tagColor, fontFamily: FONT }}
         >
           {tag}
@@ -127,8 +169,8 @@ function StatCard({ icon, tag, tagBg, tagColor, label, value }) {
             fontFamily: FONT,
             fontWeight: 500,
             fontSize: "16px",
-             lineHeight: "24px",
-             letterSpacing: "1.6px",
+            lineHeight: "24px",
+            letterSpacing: "1.6px",
             color: C.primary,
           }}
         >
@@ -139,6 +181,7 @@ function StatCard({ icon, tag, tagBg, tagColor, label, value }) {
             fontFamily: FONT,
             fontWeight: 800,
             fontSize: "48px",
+            lineHeight: "48px",
             letterSpacing: "-0.96px",
             color: "#FFFFFF",
           }}
@@ -150,58 +193,108 @@ function StatCard({ icon, tag, tagBg, tagColor, label, value }) {
   );
 }
 
-function PackCard({ pkg, onEdit }) {
+function PackCard({ pkg, onEdit, index = 0 }) {
+  // PACK_IMAGE set ho to wohi sab cards mein, warna backend ki image
+  const imageSrc = PACK_IMAGE || pkg.image_url;
+
   return (
     <div
-      className="rounded-xl overflow-hidden flex flex-col"
+      className="rounded-xl overflow-hidden flex flex-col h-[433px]"
       style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}
     >
+      {/* Image area */}
       <div
-        className="h-[200px] flex items-center justify-center"
+        className="h-[160px] shrink-0 flex items-center justify-center"
         style={{ backgroundColor: C.imageBg }}
       >
-        {pkg.image_url ? (
-          <img src={pkg.image_url} alt={pkg.title} className="h-full w-full object-contain p-4" />
+        {imageSrc ? (
+                    <img
+            src={imageSrc}
+            alt={pkg.title}
+            className={PACK_IMAGE ? "h-full w-full object-contain" : "h-full w-full object-contain p-3"}
+          />
         ) : (
           <Coins className="w-12 h-12" style={{ color: C.yellow }} />
         )}
       </div>
 
-      <div className="p-5 flex flex-col gap-4" style={{ fontFamily: FONT }}>
-        <div className="flex items-start justify-between gap-3">
-          <p className="font-bold text-base leading-6 text-white">{pkg.title}</p>
-          <span className="text-[10px] leading-[15px] shrink-0" style={{ color: C.grey }}>
-            ID: {padId(pkg.id)}
+      {/* Body (padding 24: Figma se andaza) */}
+      <div className="p-6 flex flex-col flex-1" style={{ fontFamily: FONT }}>
+        {/* Name + ID */}
+        <div className="flex items-start justify-between gap-2 min-h-[48px]">
+          <p
+            className="max-w-[100px]"
+            style={{
+              fontFamily: FONT,
+              fontWeight: 600,
+              fontSize: "18px",
+              lineHeight: "24px",
+              color: "#FFFFFF",
+            }}
+          >
+            {pkg.title}
+          </p>
+          <span
+            className="shrink-0"
+            style={{
+              fontFamily: FONT,
+              fontWeight: 400,
+              fontSize: "16px",
+              lineHeight: "24px",
+              color: C.muted,
+            }}
+          >
+            ID:
+            <br />
+            {padId(pkg.id)}
           </span>
         </div>
 
-        <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-[0.6px]" style={{ color: C.grey }}>
-            Carrots
-          </span>
-          <span className="text-sm font-bold text-white">
+        {/* Carrots */}
+        <div className="flex items-center justify-between mt-4">
+          <span style={packLabelStyle}>Carrots</span>
+          <span
+            style={{
+              fontFamily: FONT,
+              fontWeight: 700,
+              fontSize: "18px",
+              lineHeight: "28px",
+              color: "#FFFFFF",
+            }}
+          >
             {Number(pkg.total_coin || 0).toLocaleString()}
           </span>
         </div>
 
-        <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-[0.6px]" style={{ color: C.grey }}>
-            Price
-          </span>
-          <span className="text-base font-bold" style={{ color: C.lime }}>
+        {/* Price (divider ka colour: andaza) */}
+        <div
+          className="flex items-center justify-between mt-4 pt-4"
+          style={{ borderTop: `1px solid ${C.rowLine}` }}
+        >
+          <span style={packLabelStyle}>Price</span>
+          <span
+            style={{
+              fontFamily: FONT,
+              fontWeight: 800,
+              fontSize: "24px",
+              lineHeight: "32px",
+              color: C.lime,
+            }}
+          >
             {formatPrice(pkg.price, pkg.currency)}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Buttons */}
+        <div className="flex items-center gap-2 mt-auto">
           <button
             type="button"
             onClick={onEdit}
-            className="flex-1 h-9 rounded-lg inline-flex items-center justify-center gap-1.5 text-[13px] font-bold text-white transition hover:brightness-95"
-            style={{ backgroundColor: C.btn, border: `1px solid ${C.border}` }}
+            className="flex-1 h-10 rounded-lg inline-flex items-center justify-center gap-2 text-base leading-6 font-bold text-white transition"
+            style={{ backgroundColor: C.btn, fontFamily: FONT }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = C.yellow;
-              e.currentTarget.style.color = C.navy;
+              e.currentTarget.style.backgroundColor = C.lime;
+                            e.currentTarget.style.color = "#1A1E00";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = C.btn;
@@ -216,10 +309,13 @@ function PackCard({ pkg, onEdit }) {
             type="button"
             disabled
             title="Delete is not available yet (no API endpoint)"
-            className="w-9 h-9 rounded-lg inline-flex items-center justify-center opacity-50 cursor-not-allowed"
-            style={{ border: `1px solid ${C.border}`, color: C.danger }}
+            className="w-12 h-10 rounded-lg inline-flex items-center justify-center cursor-not-allowed shrink-0"
+                                               style={{
+              border: "1px solid rgba(255,180,171,0.3)",
+              color: index === 0 ? C.yellow : C.dangerSoft,
+            }}
           >
-            <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-[18px]" />
           </button>
         </div>
       </div>
@@ -228,8 +324,36 @@ function PackCard({ pkg, onEdit }) {
 }
 
 export default function AdminPackages() {
-  const [state, setState] = useState({ loading: true, error: "", packages: [] });
-  const [sales, setSales] = useState({ loading: true, error: false, revenue: 0, coins: 0 });
+  // ---- API (RTK Query) ----
+  const {
+    data: packagesData,
+    isLoading: packagesLoading,
+    error: packagesError,
+  } = useGetCoinPackagesQuery();
+  const {
+    data: paymentsData,
+    isLoading: paymentsLoading,
+    isError: paymentsError,
+  } = useListPaymentsQuery();
+  const [createCoinPackage] = useCreateCoinPackageMutation();
+  const [updateCoinPackage] = useUpdateCoinPackageMutation();
+
+  const packages = packagesData ?? EMPTY_LIST;
+  const loading = packagesLoading;
+  const error = packagesError ? getErrMsg(packagesError, "Failed to load packages") : "";
+
+  // Pichhle 24 ghante ki succeeded payments ka total
+  const sales = useMemo(() => {
+    const since = Date.now() - DAY_MS;
+    const recent = (paymentsData ?? EMPTY_LIST).filter(
+      (p) => p.status === 2 && new Date(p.created_at).getTime() >= since
+    );
+    return {
+      revenue: recent.reduce((sum, p) => sum + Number(p.amount || 0), 0),
+      coins: recent.reduce((sum, p) => sum + Number(p.total_coin || 0), 0),
+    };
+  }, [paymentsData]);
+
   const [notice, setNotice] = useState("");
   const [page, setPage] = useState(1);
 
@@ -240,40 +364,6 @@ export default function AdminPackages() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const fileInputRef = useRef(null);
-
-  const loadAll = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: "" }));
-    const [pkgRes, payRes] = await Promise.allSettled([getCoinPackages(), listPayments()]);
-
-    if (pkgRes.status === "fulfilled") {
-      setState({ loading: false, error: "", packages: pkgRes.value });
-    } else {
-      setState({
-        loading: false,
-        error: pkgRes.reason?.message || "Failed to load packages",
-        packages: [],
-      });
-    }
-
-    if (payRes.status === "fulfilled") {
-      const since = Date.now() - DAY_MS;
-      const recent = payRes.value.filter(
-        (p) => p.status === 2 && new Date(p.created_at).getTime() >= since
-      );
-      setSales({
-        loading: false,
-        error: false,
-        revenue: recent.reduce((sum, p) => sum + Number(p.amount || 0), 0),
-        coins: recent.reduce((sum, p) => sum + Number(p.total_coin || 0), 0),
-      });
-    } else {
-      setSales({ loading: false, error: true, revenue: 0, coins: 0 });
-    }
-  }, []);
-
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
 
   // ---- modal helpers ----
   function openModal(mode, pkg = null) {
@@ -320,24 +410,23 @@ export default function AdminPackages() {
       if (imageFile) values.image = imageFile;
 
       if (modal.mode === "create") {
-        await createCoinPackage(values);
+        await createCoinPackage(values).unwrap();
         setNotice(`"${values.title}" created successfully.`);
       } else {
-        await updateCoinPackage(modal.pkg.id, values);
+        await updateCoinPackage({ id: modal.pkg.id, values }).unwrap();
         setNotice(`"${values.title}" updated successfully.`);
       }
 
+      // List khud refresh hoti hai (invalidatesTags)
       setModal(null);
-      await loadAll();
     } catch (err) {
-      setFormError(err?.message || "Something went wrong. Please try again.");
+      setFormError(getErrMsg(err));
     } finally {
       setSaving(false);
     }
   }
 
   // ---- table pagination ----
-  const { packages } = state;
   const totalPages = Math.max(1, Math.ceil(packages.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
 
@@ -351,8 +440,8 @@ export default function AdminPackages() {
   const startNum = Math.max(1, Math.min(safePage - 1, totalPages - 2));
   const pageNumbers = Array.from({ length: Math.min(3, totalPages) }, (_, i) => startNum + i);
 
-  const salesValue = sales.loading ? "-" : sales.error ? "--" : formatPrice(sales.revenue);
-  const coinsValue = sales.loading ? "-" : sales.error ? "--" : sales.coins.toLocaleString();
+  const salesValue = paymentsLoading ? "-" : paymentsError ? "--" : formatPrice(sales.revenue);
+  const coinsValue = paymentsLoading ? "-" : paymentsError ? "--" : sales.coins.toLocaleString();
 
   const isView = modal?.mode === "view";
 
@@ -398,10 +487,9 @@ export default function AdminPackages() {
         )}
 
         {/* Stat cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <StatCard
             icon={totalSalesIcon}
-            iconColor={C.yellow}
             tag="Daily volume"
             tagBg="rgba(219,238,42,0.1)"
             tagColor={C.yellow}
@@ -410,7 +498,6 @@ export default function AdminPackages() {
           />
           <StatCard
             icon={carrotsIssuedIcon}
-            iconColor="#B4C5FF"
             tag="Circulation"
             tagBg="rgba(180,197,255,0.1)"
             tagColor="#B4C5FF"
@@ -427,44 +514,77 @@ export default function AdminPackages() {
           </h2>
         </div>
 
-        {state.loading && (
+        {loading && (
           <p className="text-sm mb-10" style={{ color: C.grey }}>
             Loading packages...
           </p>
         )}
-        {!state.loading && state.error && (
+        {!loading && error && (
           <p className="text-sm mb-10" style={{ color: C.danger }}>
-            {state.error}
+            {error}
           </p>
         )}
 
-        {!state.loading && !state.error && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
-            {packages.map((p) => (
-              <PackCard key={p.id} pkg={p} onEdit={() => openModal("edit", p)} />
+        {!loading && !error && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-10 items-stretch">
+                        {packages.slice(0, MAX_PACK_CARDS).map((p, i) => (
+              <PackCard key={p.id} pkg={p} index={i} onEdit={() => openModal("edit", p)} />
             ))}
 
+            {/* Add Custom Pack (Figma: Pack 4: Custom) */}
             <div
-              className="rounded-xl p-6 flex flex-col items-center justify-center text-center gap-3 min-h-[360px]"
-              style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}
+              className="rounded-xl flex flex-col items-center justify-center text-center h-[440px] min-h-[440px]"
+              style={{ backgroundColor: C.card, border: `1px dashed ${C.border}`, padding: "47px 32px 78px" }}
             >
               <span
-                className="w-12 h-12 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: C.yellow }}
+                className="w-20 h-20 rounded-full flex items-center justify-center shrink-0"
+                style={{ backgroundColor: C.yellow, border: `1px solid ${C.yellow}` }}
               >
-                <CirclePlus className="w-6 h-6" style={{ color: C.navy }} />
+                                <CirclePlus className="w-[30px] h-[30px]" style={{ color: "#000000" }} />
               </span>
-              <p className="font-bold text-base text-white">Add Custom Pack</p>
-              <p className="text-xs leading-5 max-w-[190px]" style={{ color: C.grey }}>
+              <p
+                className="mt-4 max-w-[116px]"
+                style={{
+                  fontFamily: FONT,
+                  fontWeight: 600,
+                  fontSize: "18px",
+                  lineHeight: "24px",
+                  color: "#FFFFFF",
+                }}
+              >
+                Add Custom Pack
+              </p>
+              <p
+                className="mt-2 max-w-[123px]"
+                style={{
+                  fontFamily: FONT,
+                  fontWeight: 500,
+                  fontSize: "16px",
+                  lineHeight: "24px",
+                  color: C.grey,
+                }}
+              >
                 Create a new carrot coin bundle with custom pricing.
               </p>
               <button
                 type="button"
                 onClick={() => openModal("create")}
-                className="px-6 h-10 rounded-lg text-[13px] font-bold transition hover:brightness-125"
-                style={{ border: `1px solid ${C.yellow}`, color: C.yellow }}
+                className="mt-6 rounded-lg text-center transition hover:brightness-125"
+                style={{
+                  border: `1px solid ${C.lime}`,
+                  color: C.lime,
+                  paddingTop: "8px",
+                  paddingBottom: "8px",
+                  paddingLeft: "38.09px",
+                  paddingRight: "38.09px",
+                  fontFamily: FONT,
+                  fontWeight: 700,
+                  fontSize: "16px",
+                  lineHeight: "24px",
+                }}
               >
-                Start Creation
+                {/* Figma: text do lines mein wrap hota hai */}
+                <span className="block max-w-[72px]">Start Creation</span>
               </button>
             </div>
           </div>
@@ -475,53 +595,66 @@ export default function AdminPackages() {
           className="rounded-xl overflow-hidden"
           style={{ backgroundColor: C.card, border: `1px solid ${C.border}` }}
         >
-          <div className="p-6">
-            <h2 className="text-base font-semibold text-white">Inventory Management</h2>
+          <div className="p-6" style={{ borderBottom: `1px solid ${C.border}` }}>
+            <h2 className="text-[18px] leading-6 font-semibold text-white">Inventory Management</h2>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[760px]">
+            <table className="w-full text-left table-fixed min-w-[918px]">
+              <colgroup>
+                <col style={{ width: "190px" }} />
+                <col style={{ width: "158px" }} />
+                <col style={{ width: "122px" }} />
+                <col style={{ width: "106px" }} />
+                <col style={{ width: "174px" }} />
+                <col style={{ width: "168px" }} />
+              </colgroup>
               <thead>
                 <tr
-                  className="h-14"
+                  className="h-[86px]"
                   style={{ backgroundColor: C.bar, borderBottom: `1px solid ${C.border}` }}
                 >
-                  {["Package Name", "Amount", "SKU Code", "Status", "Price"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-3 first:pl-6 text-[11px] leading-4 font-medium uppercase tracking-[0.6px] whitespace-nowrap"
-                      style={{ color: C.primary }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                  <th
-                    className="px-3 pr-6 text-right text-[11px] leading-4 font-medium uppercase tracking-[0.6px]"
-                    style={{ color: C.primary }}
-                  >
+                  <th className="px-6" style={thStyle}>
+                    Package
+                    <br />
+                    Name
+                  </th>
+                  <th className="px-6 whitespace-nowrap" style={thStyle}>
+                    Amount
+                  </th>
+                  <th className="px-6 whitespace-nowrap" style={thStyle}>
+                    SKU Code
+                  </th>
+                  <th className="px-6 whitespace-nowrap" style={thStyle}>
+                    Status
+                  </th>
+                  <th className="px-6 text-center whitespace-nowrap" style={thStyle}>
+                    Price
+                  </th>
+                  <th className="px-6 text-center whitespace-nowrap" style={thStyle}>
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {state.loading && (
-                  <tr className="h-[72px]">
+                {loading && (
+                  <tr className="h-20">
                     <td colSpan={6} className="pl-6 text-sm" style={{ color: C.grey }}>
                       Loading packages...
                     </td>
                   </tr>
                 )}
 
-                {!state.loading && state.error && (
-                  <tr className="h-[72px]">
+                {!loading && error && (
+                  <tr className="h-20">
                     <td colSpan={6} className="pl-6 text-sm" style={{ color: C.danger }}>
-                      {state.error}
+                      {error}
                     </td>
                   </tr>
                 )}
 
-                {!state.loading && !state.error && packages.length === 0 && (
-                  <tr className="h-[72px]">
+                {!loading && !error && packages.length === 0 && (
+                  <tr className="h-20">
                     <td colSpan={6} className="pl-6 text-sm" style={{ color: C.grey }}>
                       No packages yet. Create your first pack.
                     </td>
@@ -531,38 +664,94 @@ export default function AdminPackages() {
                 {pageItems.map((p, i) => (
                   <tr
                     key={p.id}
-                    className="h-[72px]"
+                    className="h-20"
                     style={i > 0 ? { borderTop: `1px solid ${C.rowLine}` } : undefined}
                   >
-                    <td className="px-3 pl-6 text-sm font-bold text-white whitespace-nowrap">
+                    {/* Package name: Plus Jakarta Sans 700 16/24 white */}
+                    <td
+                      className="px-6 truncate"
+                      style={{
+                        fontFamily: JAKARTA,
+                        fontWeight: 700,
+                        fontSize: "16px",
+                        lineHeight: "24px",
+                        color: "#FFFFFF",
+                      }}
+                    >
                       {p.title}
                     </td>
-                    <td className="px-3 whitespace-nowrap">
+
+                    {/* Amount pill: Plus Jakarta Sans 400 16/24, bg #090E1B, border 1px, radius 4, padding 2.5/12 */}
+                    <td className="pl-6 pr-0 whitespace-nowrap">
                       <span
-                        className="inline-block px-2.5 py-1 rounded text-xs"
+                        className="inline-block"
                         style={{
-                          backgroundColor: C.field,
-                          border: "1px solid rgba(255,255,255,0.1)",
+                          fontFamily: JAKARTA,
+                          fontWeight: 400,
+                          fontSize: "16px",
+                          lineHeight: "24px",
                           color: C.text,
+                          backgroundColor: "#090E1B",
+                          border: `1px solid ${C.border}`,
+                          borderRadius: "4px",
+                          padding: "2.5px 12px",
                         }}
                       >
                         {Number(p.total_coin || 0).toLocaleString()} Carrots
                       </span>
                     </td>
-                    <td className="px-3 text-xs font-bold text-white whitespace-nowrap">{p.key}</td>
-                    <td className="px-3 whitespace-nowrap">
+
+                    {/* SKU: Montserrat 700 16/24 #DEE2F5 */}
+                    <td
+                      className="pl-7 pr-0 whitespace-nowrap"
+                      style={{
+                        fontFamily: FONT,
+                        fontWeight: 700,
+                        fontSize: "16px",
+                        lineHeight: "24px",
+                        color: C.text,
+                      }}
+                    >
+                      {p.key}
+                    </td>
+
+                    {/* Status badge: padding 2.5/8, radius 4, bg #DBEE2A 20%, text Montserrat 700 10/15 #DBE21C */}
+                    <td className="pl-6 pr-0 whitespace-nowrap">
                       {/* List mein status field nahi hai: sab ACTIVE dikhate hain */}
                       <span
-                        className="inline-block px-2 py-[3px] rounded text-[10px] leading-[14px] font-bold tracking-[0.5px]"
-                        style={{ backgroundColor: "rgba(219,238,42,0.2)", color: C.lime }}
+                        className="inline-block uppercase"
+                        style={{
+                          fontFamily: FONT,
+                          fontWeight: 700,
+                          fontSize: "10px",
+                          lineHeight: "15px",
+                          letterSpacing: "0px",
+                          color: C.yellow,
+                          backgroundColor: "rgba(219,238,42,0.2)",
+                          borderRadius: "4px",
+                          padding: "2.5px 8px",
+                        }}
                       >
-                        ACTIVE
+                        Active
                       </span>
                     </td>
-                    <td className="px-3 text-sm font-bold whitespace-nowrap" style={{ color: C.lime }}>
+
+                    {/* Price: Montserrat 500 16/24 #DBEE2A, center */}
+                    <td
+                      className="px-6 text-center whitespace-nowrap"
+                      style={{
+                        fontFamily: FONT,
+                        fontWeight: 500,
+                        fontSize: "16px",
+                        lineHeight: "24px",
+                        color: C.lime,
+                      }}
+                    >
                       {formatPrice(p.price, p.currency)}
                     </td>
-                    <td className="px-3 pr-6 text-right whitespace-nowrap">
+
+                    {/* Actions: grey #6B7280 icons, center */}
+                    <td className="px-6 text-center whitespace-nowrap">
                       <div className="inline-flex items-center gap-3" style={{ color: C.grey }}>
                         <button
                           type="button"
@@ -570,7 +759,7 @@ export default function AdminPackages() {
                           onClick={() => openModal("view", p)}
                           className="hover:text-white transition"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-5 h-5" />
                         </button>
                         <button
                           type="button"
@@ -578,7 +767,7 @@ export default function AdminPackages() {
                           onClick={() => openModal("edit", p)}
                           className="hover:text-white transition"
                         >
-                          <Pencil className="w-4 h-4" />
+                          <Pencil className="w-[18px] h-[18px]" />
                         </button>
                       </div>
                     </td>
@@ -588,29 +777,30 @@ export default function AdminPackages() {
             </table>
           </div>
 
+          {/* Footer */}
           <div
-            className="flex items-center justify-between flex-wrap gap-3 p-6"
+            className="flex items-center justify-between flex-wrap gap-3 px-6 py-4"
             style={{ borderTop: `1px solid ${C.border}` }}
           >
-            <span className="text-xs font-medium" style={{ color: C.grey }}>
+            <span className="text-base leading-6 font-medium" style={{ color: C.grey }}>
               Showing {from}-{to} of {packages.length} packages
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setPage(Math.max(1, safePage - 1))}
                 disabled={safePage === 1}
-                className="w-8 h-8 rounded flex items-center justify-center transition hover:brightness-125 disabled:opacity-40"
+                className="w-[34px] h-[34px] rounded flex items-center justify-center transition hover:brightness-125 disabled:opacity-40"
                 style={{ backgroundColor: C.card, border: `1px solid ${C.pageBorder}`, color: C.grey }}
               >
-                <ChevronLeft className="w-3 h-3" />
+                <ChevronLeft className="w-3.5 h-3.5" />
               </button>
               {pageNumbers.map((n) => (
                 <button
                   key={n}
                   type="button"
                   onClick={() => setPage(n)}
-                  className="w-8 h-8 rounded text-xs font-medium transition hover:brightness-125"
+                  className="w-[34px] h-[34px] rounded text-xs font-medium transition hover:brightness-125"
                   style={
                     n === safePage
                       ? { backgroundColor: C.lime, border: `1px solid ${C.lime}`, color: C.navy, fontWeight: 700 }
@@ -624,10 +814,10 @@ export default function AdminPackages() {
                 type="button"
                 onClick={() => setPage(Math.min(totalPages, safePage + 1))}
                 disabled={safePage === totalPages}
-                className="w-8 h-8 rounded flex items-center justify-center transition hover:brightness-125 disabled:opacity-40"
+                className="w-[34px] h-[34px] rounded flex items-center justify-center transition hover:brightness-125 disabled:opacity-40"
                 style={{ backgroundColor: C.card, border: `1px solid ${C.pageBorder}`, color: C.grey }}
               >
-                <ChevronRight className="w-3 h-3" />
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
