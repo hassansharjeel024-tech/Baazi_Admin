@@ -1,21 +1,34 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Gamepad2, Trophy, Pencil, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, Gamepad2, Trophy, Pencil, RefreshCw, X } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import DataTable from "./ui/DataTable";
-import { useLazyGetGamesQuery, useUpdateGameMutation } from "../services/api/gameApi";
+import { useGetGamesQuery, useUpdateGameMutation } from "../services/api/gameApi";
+import {
+  GRAPH_PERIODS,
+  useGetPrizePoolQuery,
+} from "../services/api/graphApi";
 import { getErrorMessage } from "../lib/apiHelpers";
 import { colors, alpha } from "../theme";
 
 const FONT = "'Montserrat', sans-serif";
+const EMPTY_GAMES = [];
+const EMPTY_CATEGORIES = [];
 
-const SPARK_BARS = [
-  { height: 19.19, opacity: 0.2 },
-  { height: 28.8, opacity: 0.2 },
-  { height: 38.39, opacity: 0.4 },
-  { height: 32, opacity: 0.3 },
-  { height: 51.19, opacity: 0.6 },
-  { height: 64, opacity: 1 },
+const PERIOD_OPTIONS = [
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
 ];
+
+const STATUS_STYLE = {
+  LIVE: { bg: colors.primaryBg20, color: colors.primaryBright },
+  ACTIVE: { bg: colors.primaryBg20, color: colors.primaryBright },
+  DRAFT: { bg: colors.warningBg20, color: colors.warning },
+  INACTIVE: { bg: colors.borderMuted, color: colors.textMuted },
+  DISABLED: { bg: colors.borderMuted, color: colors.textMuted },
+};
+
+const FALLBACK_STATUS_STYLE = { bg: colors.borderMuted, color: colors.textMuted };
 
 const EMPTY_FORM = {
   name: "",
@@ -27,6 +40,30 @@ const EMPTY_FORM = {
   total_level: "",
   category_id: "",
 };
+
+function isAllCategory(category) {
+  return String(category?.name || "").trim().toLowerCase() === "all";
+}
+
+function displayText(value, fallback = "—") {
+  if (value === null || value === undefined) return fallback;
+  const s = String(value).trim();
+  return s || fallback;
+}
+
+function formatPlayers(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return Math.trunc(n).toLocaleString("en-US");
+}
+
+function formatLevels(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return displayText(value);
+  return Math.trunc(n).toLocaleString("en-US");
+}
 
 const labelStyle = {
   fontFamily: FONT,
@@ -68,11 +105,132 @@ function Field({ label, children, full }) {
   );
 }
 
+function PeriodSelect({ value, onChange, disabled }) {
+  return (
+    <div className="relative inline-block">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        aria-label="Prize pool period"
+        className="appearance-none h-10 pl-3 pr-9 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-bright disabled:opacity-60"
+        style={{
+          backgroundColor: colors.buttonGhost,
+          border: `1px solid ${colors.border}`,
+          color: colors.white,
+          fontFamily: FONT,
+        }}
+      >
+        {PERIOD_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+        style={{ color: colors.white }}
+        aria-hidden
+      />
+    </div>
+  );
+}
+
+function PrizePoolSkeleton() {
+  return (
+    <div className="flex items-center justify-between gap-4 w-full">
+      <div className="flex-1 space-y-3">
+        <div className="h-3 w-40 rounded animate-pulse" style={{ backgroundColor: colors.skeleton }} />
+        <div className="h-12 w-56 rounded animate-pulse" style={{ backgroundColor: colors.skeleton }} />
+      </div>
+      <div className="flex items-end gap-3" style={{ height: "64px" }}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <div
+            key={i}
+            className="animate-pulse"
+            style={{
+              width: "27.5px",
+              height: `${24 + (i % 4) * 10}px`,
+              borderTopLeftRadius: "2px",
+              borderTopRightRadius: "2px",
+              backgroundColor: colors.skeleton,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GameThumb({ src, alt }) {
+  const [failedSrc, setFailedSrc] = useState(null);
+  const showFallback = !src || failedSrc === src;
+
+  if (showFallback) {
+    return (
+      <span
+        className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+        style={{
+          backgroundColor: colors.borderDark,
+          border: `1px solid ${colors.border}`,
+          color: colors.primary,
+        }}
+        aria-hidden
+      >
+        <Gamepad2 className="w-4 h-4" />
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt || ""}
+      className="w-10 h-10 rounded-lg object-cover shrink-0"
+      style={{ backgroundColor: colors.borderDark }}
+      onError={() => setFailedSrc(src)}
+    />
+  );
+}
+
+function CategorySelect({ value, onChange, options, disabled }) {
+  return (
+    <div className="relative inline-block">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        aria-label="Filter games by category"
+        className="appearance-none h-10 pl-3 pr-9 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-bright disabled:opacity-60"
+        style={{
+          backgroundColor: colors.buttonGhost,
+          border: `1px solid ${colors.border}`,
+          color: colors.white,
+          fontFamily: FONT,
+        }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+        style={{ color: colors.white }}
+        aria-hidden
+      />
+    </div>
+  );
+}
+
 export default function AdminGames() {
-  const [fetchGames] = useLazyGetGamesQuery();
   const [updateGame, { isLoading: saving }] = useUpdateGameMutation();
 
-  const [state, setState] = useState({ loading: true, error: "", games: [], categories: [] });
+  const [period, setPeriod] = useState("weekly");
+  const safePeriod = GRAPH_PERIODS.includes(period) ? period : "weekly";
+
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [notice, setNotice] = useState("");
 
   const [editing, setEditing] = useState(null);
@@ -80,54 +238,97 @@ export default function AdminGames() {
   const [imageFile, setImageFile] = useState(null);
   const [formError, setFormError] = useState("");
 
-  const loadGames = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: "" }));
-    try {
-      // 1) saari games + categories ki list
-      const base = await fetchGames().unwrap();
-      const categories = (base?.category || []).filter((c) => c.id !== 0);
+  const {
+    data: prizePoolData,
+    currentData: prizePoolCurrent,
+    isLoading: prizePoolLoading,
+    isFetching: prizePoolFetching,
+    isError: prizePoolIsError,
+    error: prizePoolError,
+    refetch: refetchPrizePool,
+  } = useGetPrizePoolQuery({ period: safePeriod });
 
-      // 2) list mein game ki category nahi aati, is liye har category ke filter se match karte hain
-      const results = await Promise.allSettled(
-        categories.map((c) => fetchGames({ category_id: c.id }).unwrap())
-      );
-      const categoryByGame = {};
-      results.forEach((res, i) => {
-        if (res.status === "fulfilled") {
-          (res.value?.games || []).forEach((g) => {
-            categoryByGame[g.id] = categories[i];
-          });
-        }
-      });
+  // Prefer currentData so a previous period's cache never paints for a new period
+  const prizePool =
+    prizePoolCurrent ??
+    (prizePoolData?.period === safePeriod ? prizePoolData : undefined);
 
-      const games = (base?.games || []).map((g) => ({
-        ...g,
-        categoryId: categoryByGame[g.id]?.id ?? "",
-        categoryName: categoryByGame[g.id]?.name || "-",
-      }));
+  const showPrizeSkeleton =
+    prizePoolLoading || (prizePoolFetching && !prizePool);
+  const showPrizeHardError = prizePoolIsError && !prizePool;
+  const showPrizeSoftError = prizePoolIsError && Boolean(prizePool);
+  const prizeErrorMessage = prizePoolIsError
+    ? getErrorMessage(prizePoolError, "Unable to load prize pool. Please try again.")
+    : "";
 
-      setState({ loading: false, error: "", games, categories });
-    } catch (err) {
-      setState({
-        loading: false,
-        error: getErrorMessage(err, "Failed to load games"),
-        games: [],
-        categories: [],
-      });
-    }
-  }, [fetchGames]);
+  const totalLabel = prizePool?.total_label || "—";
+  const sparkBars = prizePool?.spark_bars ?? [];
 
-  useEffect(() => {
-    loadGames();
-  }, [loadGames]);
+  const gamesQueryArgs = useMemo(() => {
+    if (categoryFilter === "all" || categoryFilter === "") return {};
+    const id = Number(categoryFilter);
+    if (!Number.isFinite(id)) return {};
+    return { category_id: id };
+  }, [categoryFilter]);
+
+  const {
+    data: gamesData,
+    currentData: gamesCurrent,
+    isLoading: gamesLoading,
+    isFetching: gamesFetching,
+    isError: gamesIsError,
+    error: gamesError,
+    refetch: refetchGames,
+  } = useGetGamesQuery(gamesQueryArgs);
+
+  // Games rows only from currentData to avoid stale category results
+  const games = gamesCurrent?.games ?? EMPTY_GAMES;
+  // Categories can come from any successful payload (list is shared across filters)
+  const categories =
+    (Array.isArray(gamesCurrent?.category) && gamesCurrent.category.length
+      ? gamesCurrent.category
+      : null) ||
+    (Array.isArray(gamesData?.category) ? gamesData.category : null) ||
+    EMPTY_CATEGORIES;
+
+  const showGamesSkeleton =
+    gamesLoading || (gamesFetching && !gamesCurrent);
+  const showGamesHardError = gamesIsError && !gamesCurrent;
+  const showGamesSoftError = gamesIsError && Boolean(gamesCurrent);
+  const showGamesEmpty =
+    !showGamesSkeleton && !showGamesHardError && games.length === 0;
+  const gamesErrorMessage = gamesIsError
+    ? getErrorMessage(gamesError, "Unable to load games. Please try again.")
+    : "";
+
+  const categoryOptions = useMemo(() => {
+    const opts = [{ value: "all", label: "All Categories" }];
+    categories.forEach((c) => {
+      if (c?.id === null || c?.id === undefined) return;
+      if (isAllCategory(c)) return; // covered by "all" (omit category_id)
+      opts.push({ value: String(c.id), label: displayText(c.name, `Category ${c.id}`) });
+    });
+    return opts;
+  }, [categories]);
+
+  const editCategories = useMemo(
+    () => categories.filter((c) => c?.id !== null && c?.id !== undefined && !isAllCategory(c)),
+    [categories]
+  );
 
   function openEdit(game) {
+    const categoryId = game?.category?.id;
     setEditing(game);
     setForm({
       ...EMPTY_FORM,
       name: game.name || "",
       url: game.url || "",
-      category_id: game.categoryId === "" ? "" : String(game.categoryId),
+      total_level:
+        game.total_level === null || game.total_level === undefined
+          ? ""
+          : String(game.total_level),
+      category_id:
+        categoryId === null || categoryId === undefined ? "" : String(categoryId),
     });
     setImageFile(null);
     setFormError("");
@@ -151,7 +352,6 @@ export default function AdminGames() {
       await updateGame({ id: editing.id, values }).unwrap();
       setEditing(null);
       setNotice(`"${form.name || editing.name}" updated successfully.`);
-      await loadGames();
     } catch (err) {
       setFormError(getErrorMessage(err, "Failed to update game"));
     }
@@ -160,18 +360,42 @@ export default function AdminGames() {
   const gamesColumns = useMemo(
     () => [
       {
-        key: "name",
+        key: "game",
         header: "Game",
         headerClassName: "py-3 px-5",
         cellClassName: "py-4 px-5",
-        cellStyle: {
-          fontFamily: FONT,
-          fontWeight: 700,
-          fontSize: "16px",
-          lineHeight: "24px",
-          color: colors.white,
-        },
-        accessor: "name",
+        skeletonWidth: 180,
+        render: (g) => (
+          <div className="flex items-center gap-3 min-w-0">
+            <GameThumb src={g.image} alt={g.name} />
+            <div className="min-w-0">
+              <p
+                className="truncate"
+                style={{
+                  fontFamily: FONT,
+                  fontWeight: 700,
+                  fontSize: "16px",
+                  lineHeight: "24px",
+                  color: colors.white,
+                }}
+              >
+                {displayText(g.name, "Untitled")}
+              </p>
+              {g.url ? (
+                <a
+                  href={g.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs truncate block hover:underline"
+                  style={{ color: colors.textSecondary, maxWidth: 220 }}
+                  title={g.url}
+                >
+                  Open URL
+                </a>
+              ) : null}
+            </div>
+          </div>
+        ),
       },
       {
         key: "category",
@@ -179,7 +403,26 @@ export default function AdminGames() {
         headerClassName: "py-3 px-5",
         cellClassName: "py-4 px-5",
         cellStyle: bodyCellStyle,
-        accessor: "categoryName",
+        skeletonWidth: 90,
+        render: (g) => displayText(g.category?.name),
+      },
+      {
+        key: "rating",
+        header: "Rating",
+        headerClassName: "py-3 px-5",
+        cellClassName: "py-4 px-5",
+        cellStyle: bodyCellStyle,
+        skeletonWidth: 50,
+        render: (g) => displayText(g.rating),
+      },
+      {
+        key: "total_level",
+        header: "Levels",
+        headerClassName: "py-3 px-5",
+        cellClassName: "py-4 px-5",
+        cellStyle: bodyCellStyle,
+        skeletonWidth: 60,
+        render: (g) => formatLevels(g.total_level),
       },
       {
         key: "players",
@@ -187,21 +430,38 @@ export default function AdminGames() {
         headerClassName: "py-3 px-5",
         cellClassName: "py-4 px-5",
         cellStyle: bodyCellStyle,
-        render: () => "—",
+        skeletonWidth: 60,
+        render: (g) => formatPlayers(g.players),
       },
       {
         key: "status",
         header: "Status",
         headerClassName: "py-3 px-5",
         cellClassName: "py-4 px-5",
-        cellStyle: bodyCellStyle,
-        render: () => "—",
+        skeletonWidth: 70,
+        render: (g) => {
+          const label = displayText(g.status_label, "Unknown");
+          const style = STATUS_STYLE[String(label).toUpperCase()] || FALLBACK_STATUS_STYLE;
+          return (
+            <span
+              className="inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase"
+              style={{
+                backgroundColor: style.bg,
+                color: style.color,
+                fontFamily: FONT,
+              }}
+            >
+              {label}
+            </span>
+          );
+        },
       },
       {
         key: "actions",
         header: "Actions",
         headerClassName: "py-3 px-5 text-right",
         cellClassName: "py-4 px-5 text-right",
+        skeletonWidth: 80,
         render: (g) => (
           <button
             type="button"
@@ -273,7 +533,40 @@ export default function AdminGames() {
         </div>
       )}
 
-      {/* Active Players aur Prize Pool: in ki API abhi nahi hai, static hain */}
+      <div className="flex items-center justify-end mb-3">
+        <PeriodSelect
+          value={safePeriod}
+          onChange={setPeriod}
+          disabled={showPrizeSkeleton && !prizePool}
+        />
+      </div>
+
+      {showPrizeSoftError && (
+        <div
+          className="mb-4 rounded-lg px-4 py-3 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          role="status"
+          style={{
+            fontFamily: FONT,
+            color: colors.warning,
+            backgroundColor: colors.warningBg10,
+            border: `1px solid ${colors.warningBg25}`,
+          }}
+        >
+          <span>Prize pool couldn’t refresh. Showing the last loaded results.</span>
+          <button
+            type="button"
+            onClick={() => refetchPrizePool()}
+            disabled={prizePoolFetching}
+            className="inline-flex items-center gap-2 font-bold hover:underline disabled:opacity-60 shrink-0"
+            style={{ color: colors.warning }}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${prizePoolFetching ? "animate-spin" : ""}`} aria-hidden />
+            {prizePoolFetching ? "Refreshing…" : "Retry"}
+          </button>
+        </div>
+      )}
+
+      {/* Active Players remains static until its API is available; Prize Pool is live */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         <div
           className="rounded-2xl p-6"
@@ -328,7 +621,12 @@ export default function AdminGames() {
 
         <div
           className="rounded-2xl p-6"
-          style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
+          style={{
+            backgroundColor: colors.surface,
+            border: `1px solid ${colors.border}`,
+            opacity: prizePoolFetching && prizePool && !prizePoolIsError ? 0.9 : 1,
+            transition: "opacity 160ms ease",
+          }}
         >
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center mb-4"
@@ -336,51 +634,90 @@ export default function AdminGames() {
           >
             <Trophy className="w-4 h-4" style={{ color: colors.primary }} />
           </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p
-                className="mb-1"
-                style={{
-                  fontFamily: FONT,
-                  fontWeight: 500,
-                  fontSize: "12px",
-                  lineHeight: "16px",
-                  letterSpacing: "1.2px",
-                  textTransform: "uppercase",
-                  color: colors.textPrimary,
-                }}
+
+          {showPrizeHardError ? (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold" style={{ fontFamily: FONT, color: colors.dangerSoft }}>
+                  Couldn’t load prize pool
+                </p>
+                <p className="text-sm mt-1" style={{ fontFamily: FONT, color: colors.textSecondary }}>
+                  {prizeErrorMessage}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => refetchPrizePool()}
+                disabled={prizePoolFetching}
+                className="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg text-sm font-bold transition hover:brightness-110 disabled:opacity-60 shrink-0"
+                style={{ backgroundColor: colors.button, color: colors.white, fontFamily: FONT }}
               >
-                Total Prize Pool Distributed
-              </p>
-              <p
-                style={{
-                  fontFamily: FONT,
-                  fontWeight: 700,
-                  fontSize: "48px",
-                  lineHeight: "56px",
-                  letterSpacing: "-0.96px",
-                  color: colors.white,
-                }}
-              >
-                $1,45,20,000
-              </p>
+                <RefreshCw className={`w-4 h-4 ${prizePoolFetching ? "animate-spin" : ""}`} aria-hidden />
+                {prizePoolFetching ? "Retrying…" : "Retry"}
+              </button>
             </div>
-            <div className="flex items-end gap-3" style={{ height: "64px" }}>
-              {SPARK_BARS.map((bar, i) => (
-                <div
-                  key={i}
+          ) : showPrizeSkeleton ? (
+            <PrizePoolSkeleton />
+          ) : (
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p
+                  className="mb-1"
                   style={{
-                    width: "27.5px",
-                    height: `${bar.height}px`,
-                    borderTopLeftRadius: "2px",
-                    borderTopRightRadius: "2px",
-                    backgroundColor:
-                      bar.opacity === 1 ? colors.primary : alpha(colors.primaryBright, bar.opacity),
+                    fontFamily: FONT,
+                    fontWeight: 500,
+                    fontSize: "12px",
+                    lineHeight: "16px",
+                    letterSpacing: "1.2px",
+                    textTransform: "uppercase",
+                    color: colors.textPrimary,
                   }}
-                />
-              ))}
+                >
+                  Total Prize Pool Distributed
+                </p>
+                <p
+                  style={{
+                    fontFamily: FONT,
+                    fontWeight: 700,
+                    fontSize: "48px",
+                    lineHeight: "56px",
+                    letterSpacing: "-0.96px",
+                    color: colors.white,
+                  }}
+                  className="truncate"
+                  title={totalLabel}
+                >
+                  {totalLabel}
+                </p>
+              </div>
+              {sparkBars.length > 0 ? (
+                <div className="flex items-end gap-3 shrink-0" style={{ height: "64px" }}>
+                  {sparkBars.map((bar, i) => (
+                    <div
+                      key={`spark-${i}-${bar.height}-${bar.opacity}`}
+                      style={{
+                        width: "27.5px",
+                        height: `${bar.height}px`,
+                        borderTopLeftRadius: "2px",
+                        borderTopRightRadius: "2px",
+                        backgroundColor:
+                          bar.opacity === 1
+                            ? colors.primary
+                            : alpha(colors.primaryBright, bar.opacity),
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p
+                  className="text-sm shrink-0"
+                  style={{ fontFamily: FONT, color: colors.textSecondary }}
+                >
+                  No spark data
+                </p>
+              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -392,22 +729,87 @@ export default function AdminGames() {
           paddingTop: "8px",
         }}
       >
-        <DataTable
-          tableClassName="w-full text-left min-w-[560px]"
-          theadRowStyle={{
-            backgroundColor: colors.surfaceElevated,
-            borderBottom: `1px solid ${colors.borderOlive}`,
+        <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-4">
+          <h2
+            style={{
+              fontFamily: FONT,
+              fontWeight: 600,
+              fontSize: "16px",
+              lineHeight: "24px",
+              color: colors.textSecondary,
+            }}
+          >
+            Games
+          </h2>
+          <CategorySelect
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+            options={categoryOptions}
+            disabled={showGamesSkeleton && !gamesCurrent}
+          />
+        </div>
+
+        {showGamesSoftError && (
+          <div
+            className="mx-5 mb-4 rounded-lg px-4 py-3 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+            role="status"
+            style={{
+              fontFamily: FONT,
+              color: colors.warning,
+              backgroundColor: colors.warningBg10,
+              border: `1px solid ${colors.warningBg25}`,
+            }}
+          >
+            <span>Games list couldn’t refresh. Showing the last loaded results.</span>
+            <button
+              type="button"
+              onClick={() => refetchGames()}
+              disabled={gamesFetching}
+              className="inline-flex items-center gap-2 font-bold hover:underline disabled:opacity-60 shrink-0"
+              style={{ color: colors.warning }}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${gamesFetching ? "animate-spin" : ""}`} aria-hidden />
+              {gamesFetching ? "Refreshing…" : "Retry"}
+            </button>
+          </div>
+        )}
+
+        <div
+          style={{
+            opacity: gamesFetching && gamesCurrent && !gamesIsError ? 0.9 : 1,
+            transition: "opacity 160ms ease",
           }}
-          columns={gamesColumns}
-          data={state.games}
-          isLoading={state.loading}
-          loadingMessage="Loading games..."
-          isError={Boolean(state.error)}
-          error={state.error}
-          emptyMessage="No games found."
-          divided="top"
-          divider={`1px solid ${colors.borderSubtle}`}
-        />
+        >
+          <DataTable
+            tableClassName="w-full text-left min-w-[720px]"
+            theadRowStyle={{
+              backgroundColor: colors.surfaceElevated,
+              borderBottom: `1px solid ${colors.borderOlive}`,
+            }}
+            columns={gamesColumns}
+            data={showGamesHardError ? [] : games}
+            getRowKey={(g, i) => g.id ?? i}
+            isLoading={showGamesSkeleton}
+            skeletonRows={6}
+            skeletonRowClassName="h-[72px]"
+            skeletonDivider={`1px solid ${colors.borderSubtle}`}
+            isError={showGamesHardError}
+            error={gamesErrorMessage}
+            errorTitle="Couldn’t load games"
+            onRetry={() => refetchGames()}
+            isRetrying={gamesFetching}
+            showEmpty={showGamesEmpty}
+            emptyMessage={
+              categoryFilter !== "all"
+                ? "No games found for this category."
+                : "No games found."
+            }
+            emptyClassName="py-8 px-5 text-sm"
+            emptyStyle={{ color: colors.textSecondary, fontFamily: FONT }}
+            divided="top"
+            divider={`1px solid ${colors.borderSubtle}`}
+          />
+        </div>
       </div>
 
       {/* Edit modal: Figma mein is ka design nahi tha, theme ke mutabiq banaya hai */}
@@ -493,7 +895,7 @@ export default function AdminGames() {
               <Field label="Category">
                 <select style={inputStyle} value={form.category_id} onChange={setField("category_id")}>
                   <option value="">Select category</option>
-                  {state.categories.map((c) => (
+                  {editCategories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>

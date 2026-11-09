@@ -63,6 +63,10 @@ export const baseApi = createApi({
     "CoinPackages",
     "Payments",
     "AdminUsers",
+    "DashboardOverview",
+    "PrizePool",
+    "CarrotDistribution",
+    "TopBundles",
   ],
   endpoints: () => ({}),
 });

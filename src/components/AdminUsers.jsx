@@ -475,13 +475,13 @@ export default function AdminUsers() {
         skeletonWidth: "20%",
         align: "right",
         render: (u) => {
-          const id = u.player_id ?? u.id;
+          const id = u.id;
           if (id === null || id === undefined || id === "") return null;
           return (
             <Link
               to={`/admin/users/${String(id).replace(/^#/, "")}`}
               className="text-white/60 hover:text-white transition-colors inline-flex"
-              aria-label={`View user ${formatPlayerId(id)}`}
+              aria-label={`View user ${formatPlayerId(u.player_id ?? id)}`}
             >
               <Eye className="w-4 h-4" />
             </Link>

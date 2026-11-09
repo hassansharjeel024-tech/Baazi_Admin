@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Download, RefreshCw, User } from "lucide-react";
+import { ChevronDown, Download, RefreshCw, User } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import DataTable from "./ui/DataTable";
 import totalUsersIcon from "../assets/stat-total-users.png";
@@ -9,10 +9,22 @@ import carrotIssuedIcon from "../assets/stat-carrot-issued.png";
 import revenueIcon from "../assets/stat-revenue.png";
 import { useGetAdminRecentRedemptionsQuery } from "../services/api/userRewardApi";
 import { useListPaymentsQuery, calculateRevenue } from "../services/api/paymentApi";
+import {
+  GRAPH_PERIODS,
+  useGetDashboardOverviewQuery,
+} from "../services/api/graphApi";
 import { getErrorMessage } from "../lib/apiHelpers";
 import { colors } from "../theme";
 
 const RECENT_LIMIT = 5;
+
+const PERIOD_OPTIONS = [
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
+];
+
+const GAME_COLOR_FALLBACK = colors.accentSoft;
 
 // Total Users, Active Games, Carrot Issued: in ki API abhi nahi hai, static hain.
 // Revenue ki value API se aati hai (neeche AdminDashboard mein).
@@ -73,20 +85,6 @@ const STATS = [
       { h: 71, o: 1 },
     ],
   },
-];
-
-const TOP_GAMES = [
-  { name: "Snake", value: "14.2k", pct: 70, color: colors.accentSoft },
-  { name: "8 Ball Pool", value: "11.6k", pct: 58, color: colors.accentSoft },
-  { name: "Bingo Blitz", value: "9.3k", pct: 46, color: colors.primary },
-  { name: "Star Blaster", value: "6.4k", pct: 32, color: colors.chartPurple },
-];
-
-const PLATFORM_BREAKDOWN = [
-  { label: "iOS", pct: 45 },
-  { label: "Android", pct: 25 },
-  { label: "Web", pct: 15 },
-  { label: "Other", pct: 15 },
 ];
 
 const STATUS_STYLE = {
@@ -203,11 +201,16 @@ function StatCard({ label, value, icon, iconBg, bars, accent }) {
 }
 
 // pct    = number shown in the centre label (e.g. 45%)
-// arcPct = how much of the circle the blue arc fills (Figma shows ~75%)
-function DonutChart({ pct, arcPct = 75 }) {
+// arcPct = how much of the circle the blue arc fills
+function DonutChart({ label, pct, arcPct = 0 }) {
   const size = 192;
   const center = size / 2;
   const strokeWidth = 8;
+  const safeArc = Math.max(0, Math.min(100, Number(arcPct) || 0));
+  const displayPct =
+    pct === null || pct === undefined || Number.isNaN(Number(pct))
+      ? "—"
+      : `${Number(pct)}%`;
 
   // outer grey track: full 192px diameter
   const rOuter = (192 - strokeWidth) / 2;
@@ -215,7 +218,7 @@ function DonutChart({ pct, arcPct = 75 }) {
   // inner blue arc: 176px diameter
   const rInner = (176 - strokeWidth) / 2;
   const circInner = 2 * Math.PI * rInner;
-  const dashInner = (arcPct / 100) * circInner;
+  const dashInner = (safeArc / 100) * circInner;
 
   const centerText = {
     fontFamily: "'Montserrat', sans-serif",
@@ -248,14 +251,143 @@ function DonutChart({ pct, arcPct = 75 }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <p style={centerText}>iOS</p>
-        <p style={centerText}>{pct}%</p>
+        <p style={centerText}>{label || "—"}</p>
+        <p style={centerText}>{displayPct}</p>
+      </div>
+    </div>
+  );
+}
+
+function PeriodSelect({ value, onChange, disabled }) {
+  return (
+    <div className="relative inline-block">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        aria-label="Dashboard overview period"
+        className="appearance-none h-[46px] pl-4 pr-10 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-bright disabled:opacity-60"
+        style={{
+          backgroundColor: colors.buttonGhost,
+          border: `1px solid ${colors.border}`,
+          color: colors.white,
+        }}
+      >
+        {PERIOD_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+        style={{ color: colors.white }}
+        aria-hidden
+      />
+    </div>
+  );
+}
+
+function OverviewSoftError({ message, onRetry, isRetrying }) {
+  return (
+    <div
+      className="mb-4 rounded-lg px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm"
+      role="status"
+      style={{
+        color: colors.warning,
+        backgroundColor: colors.warningBg10,
+        border: `1px solid ${colors.warningBg25}`,
+      }}
+    >
+      <span>{message}</span>
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={isRetrying}
+        className="inline-flex items-center gap-2 font-bold hover:underline disabled:opacity-60 shrink-0"
+        style={{ color: colors.warning }}
+      >
+        <RefreshCw className={`w-3.5 h-3.5 ${isRetrying ? "animate-spin" : ""}`} aria-hidden />
+        {isRetrying ? "Refreshing…" : "Retry"}
+      </button>
+    </div>
+  );
+}
+
+function OverviewHardError({ title, message, onRetry, isRetrying }) {
+  return (
+    <div
+      className="rounded-xl px-5 py-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+      style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
+    >
+      <div>
+        <p className="text-sm font-semibold" style={{ color: colors.dangerSoft }}>
+          {title}
+        </p>
+        <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>
+          {message}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={isRetrying}
+        className="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg text-sm font-bold transition hover:brightness-110 disabled:opacity-60 shrink-0"
+        style={{ backgroundColor: colors.button, color: colors.white }}
+      >
+        <RefreshCw className={`w-4 h-4 ${isRetrying ? "animate-spin" : ""}`} aria-hidden />
+        {isRetrying ? "Retrying…" : "Retry"}
+      </button>
+    </div>
+  );
+}
+
+function TopGamesSkeleton({ rows = 4 }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-3">
+          <div
+            className="w-24 h-3 rounded animate-pulse shrink-0"
+            style={{ backgroundColor: colors.skeleton }}
+          />
+          <div
+            className="flex-1 h-2 rounded-full animate-pulse"
+            style={{ backgroundColor: colors.skeleton }}
+          />
+          <div
+            className="w-14 h-4 rounded animate-pulse shrink-0"
+            style={{ backgroundColor: colors.skeleton }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PlatformBreakdownSkeleton() {
+  return (
+    <div className="flex flex-col items-center">
+      <div
+        className="w-[192px] h-[192px] rounded-full animate-pulse mx-auto"
+        style={{ backgroundColor: colors.skeleton }}
+      />
+      <div className="flex flex-col gap-3 mt-8 w-full">
+        {Array.from({ length: 3 }, (_, i) => (
+          <div key={i} className="flex items-center justify-between">
+            <div className="h-4 w-20 rounded animate-pulse" style={{ backgroundColor: colors.skeleton }} />
+            <div className="h-4 w-10 rounded animate-pulse" style={{ backgroundColor: colors.skeleton }} />
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
 export default function AdminDashboard() {
+  const [period, setPeriod] = useState("weekly");
+  const safePeriod = GRAPH_PERIODS.includes(period) ? period : "weekly";
+
   const {
     data: payments,
     isLoading: paymentsLoading,
@@ -270,6 +402,36 @@ export default function AdminDashboard() {
     error: recentError,
     refetch: refetchRecent,
   } = useGetAdminRecentRedemptionsQuery({ limit: RECENT_LIMIT });
+
+  const {
+    data: overviewData,
+    currentData: overviewCurrent,
+    isLoading: overviewLoading,
+    isFetching: overviewFetching,
+    isError: overviewIsError,
+    error: overviewError,
+    refetch: refetchOverview,
+  } = useGetDashboardOverviewQuery({ period: safePeriod });
+
+  // Prefer currentData so a previous period's cache never paints for a new period
+  const overview =
+    overviewCurrent ??
+    (overviewData?.period === safePeriod ? overviewData : undefined);
+
+  const games = overview?.games ?? [];
+  const platformBreakdown = overview?.platform_breakdown ?? null;
+  const platformSegments = platformBreakdown?.segments ?? [];
+
+  const showOverviewSkeleton =
+    overviewLoading || (overviewFetching && !overview);
+  const showOverviewHardError = overviewIsError && !overview;
+  const showOverviewSoftError = overviewIsError && Boolean(overview);
+  const overviewErrorMessage = overviewIsError
+    ? getErrorMessage(
+        overviewError,
+        "Unable to load dashboard overview. Please try again."
+      )
+    : "";
 
   const revenueValue = useMemo(
     () => (payments ? calculateRevenue(payments) : 0),
@@ -397,17 +559,25 @@ export default function AdminDashboard() {
               Welcome back! Here's what's happening in Baazi today.
             </p>
           </div>
-          <button
-            className="flex items-center gap-2 text-sm font-bold px-6 py-2.5 rounded-full hover:brightness-95 transition"
-            style={{
-              backgroundColor: colors.primary,
-              color: colors.surfacePanel,
-              boxShadow: `0px 0px 15px 0px ${colors.primaryGlow}`,
-            }}
-          >
-            <Download className="w-4 h-4" />
-            Export Report
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <PeriodSelect
+              value={safePeriod}
+              onChange={setPeriod}
+              disabled={showOverviewSkeleton && !overview}
+            />
+            <button
+              type="button"
+              className="flex items-center gap-2 text-sm font-bold px-6 py-2.5 rounded-full hover:brightness-95 transition"
+              style={{
+                backgroundColor: colors.primary,
+                color: colors.surfacePanel,
+                boxShadow: `0px 0px 15px 0px ${colors.primaryGlow}`,
+              }}
+            >
+              <Download className="w-4 h-4" />
+              Export Report
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -416,100 +586,159 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div
-            className="lg:col-span-2 rounded-xl pt-8 px-8 pb-24"
-            style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
-          >
-            <h2
-              className="mb-6"
-              style={{
-                fontFamily: "'Montserrat', sans-serif",
-                fontWeight: 600,
-                fontSize: "18px",
-                lineHeight: "24px",
-                color: colors.textPrimary,
-              }}
-            >
-              Top games by players
-            </h2>
-            <div className="flex flex-col gap-4">
-              {TOP_GAMES.map((g) => (
-                <div key={g.name} className="flex items-center gap-3">
-                  <span className="text-white/60 text-xs w-24 shrink-0">{g.name}</span>
-                  <div
-                    className="flex-1 h-2 rounded-full overflow-hidden"
-                    style={{ backgroundColor: colors.indigo }}
-                  >
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${g.pct}%`, backgroundColor: g.color }}
-                    />
-                  </div>
-                  <span
-                    className="w-14 text-right shrink-0"
-                    style={{
-                      fontFamily: "'Montserrat', sans-serif",
-                      fontWeight: 500,
-                      fontSize: "16px",
-                      lineHeight: "24px",
-                      color: colors.textPrimary,
-                    }}
-                  >
-                    {g.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+        {showOverviewSoftError && (
+          <OverviewSoftError
+            message="Overview couldn’t refresh. Showing the last loaded results."
+            onRetry={() => refetchOverview()}
+            isRetrying={overviewFetching}
+          />
+        )}
 
+        {showOverviewHardError ? (
+          <OverviewHardError
+            title="Couldn’t load dashboard overview"
+            message={overviewErrorMessage}
+            onRetry={() => refetchOverview()}
+            isRetrying={overviewFetching}
+          />
+        ) : (
           <div
-            className="rounded-xl p-8"
-            style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
+            className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+            style={{
+              opacity: overviewFetching && overview && !overviewIsError ? 0.9 : 1,
+              transition: "opacity 160ms ease",
+            }}
           >
-            <h2
-              className="mb-6"
-              style={{
-                fontFamily: "'Montserrat', sans-serif",
-                fontWeight: 600,
-                fontSize: "18px",
-                lineHeight: "24px",
-                color: colors.textPrimary,
-              }}
+            <div
+              className="lg:col-span-2 rounded-xl pt-8 px-8 pb-24"
+              style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
             >
-              Platform breakdown
-            </h2>
-            <DonutChart pct={PLATFORM_BREAKDOWN[0].pct} arcPct={75} />
-            <div className="flex flex-col gap-2 mt-8">
-              {PLATFORM_BREAKDOWN.slice(1).map((seg) => (
-                <div key={seg.label} className="flex items-center justify-between">
-                  <span
-                    style={{
-                      fontFamily: "'Montserrat', sans-serif",
-                      fontWeight: 500,
-                      fontSize: "16px",
-                      lineHeight: "24px",
-                      color: colors.textSecondary,
-                    }}
-                  >
-                    {seg.label}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: "'Montserrat', sans-serif",
-                      fontWeight: 500,
-                      fontSize: "16px",
-                      lineHeight: "24px",
-                      color: colors.textPrimary,
-                    }}
-                  >
-                    {seg.pct}%
-                  </span>
+              <h2
+                className="mb-6"
+                style={{
+                  fontFamily: "'Montserrat', sans-serif",
+                  fontWeight: 600,
+                  fontSize: "18px",
+                  lineHeight: "24px",
+                  color: colors.textPrimary,
+                }}
+              >
+                Top games by players
+              </h2>
+
+              {showOverviewSkeleton ? (
+                <TopGamesSkeleton />
+              ) : games.length === 0 ? (
+                <p className="text-sm py-8" style={{ color: colors.textSecondary }}>
+                  No top games data for this period.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {games.map((g) => (
+                    <div key={g.name} className="flex items-center gap-3">
+                      <span className="text-white/60 text-xs w-24 shrink-0 truncate" title={g.name}>
+                        {g.name}
+                      </span>
+                      <div
+                        className="flex-1 h-2 rounded-full overflow-hidden"
+                        style={{ backgroundColor: colors.indigo }}
+                      >
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.max(0, Math.min(100, g.pct))}%`,
+                            backgroundColor: g.color || GAME_COLOR_FALLBACK,
+                          }}
+                        />
+                      </div>
+                      <span
+                        className="w-14 text-right shrink-0"
+                        style={{
+                          fontFamily: "'Montserrat', sans-serif",
+                          fontWeight: 500,
+                          fontSize: "16px",
+                          lineHeight: "24px",
+                          color: colors.textPrimary,
+                        }}
+                      >
+                        {g.value}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+            </div>
+
+            <div
+              className="rounded-xl p-8"
+              style={{ backgroundColor: colors.surface, border: `1px solid ${colors.border}` }}
+            >
+              <h2
+                className="mb-6"
+                style={{
+                  fontFamily: "'Montserrat', sans-serif",
+                  fontWeight: 600,
+                  fontSize: "18px",
+                  lineHeight: "24px",
+                  color: colors.textPrimary,
+                }}
+              >
+                Platform breakdown
+              </h2>
+
+              {showOverviewSkeleton ? (
+                <PlatformBreakdownSkeleton />
+              ) : !platformBreakdown ||
+                (!platformBreakdown.highlight_label && platformSegments.length === 0) ? (
+                <p className="text-sm py-8 text-center" style={{ color: colors.textSecondary }}>
+                  No platform breakdown for this period.
+                </p>
+              ) : (
+                <>
+                  <DonutChart
+                    label={platformBreakdown.highlight_label}
+                    pct={platformBreakdown.highlight_pct}
+                    arcPct={platformBreakdown.arc_pct}
+                  />
+                  <div className="flex flex-col gap-2 mt-8">
+                    {platformSegments.length === 0 ? (
+                      <p className="text-sm text-center" style={{ color: colors.textSecondary }}>
+                        No platform segments available.
+                      </p>
+                    ) : (
+                      platformSegments.map((seg) => (
+                        <div key={seg.label} className="flex items-center justify-between">
+                          <span
+                            style={{
+                              fontFamily: "'Montserrat', sans-serif",
+                              fontWeight: 500,
+                              fontSize: "16px",
+                              lineHeight: "24px",
+                              color: colors.textSecondary,
+                            }}
+                          >
+                            {seg.label}
+                          </span>
+                          <span
+                            style={{
+                              fontFamily: "'Montserrat', sans-serif",
+                              fontWeight: 500,
+                              fontSize: "16px",
+                              lineHeight: "24px",
+                              color: colors.textPrimary,
+                            }}
+                          >
+                            {seg.pct}%
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
-        </div>
+        )}
 
         <div
           className="rounded-xl overflow-hidden"

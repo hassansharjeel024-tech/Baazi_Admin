@@ -21,6 +21,9 @@ import {
   RefreshCw,
   User,
   AtSign,
+  X,
+  Copy,
+  Check,
 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import DataTable from "./ui/DataTable";
@@ -28,6 +31,9 @@ import { colors } from "../theme";
 import {
   ADMIN_USER_PERIODS,
   useGetAdminUserQuery,
+  useBanAdminUserMutation,
+  useUnbanAdminUserMutation,
+  useResetAdminUserPasswordMutation,
   useGetAdminUserTransactionsQuery,
   useGetAdminUserTasksXpQuery,
   useGetAdminUserRedemptionsQuery,
@@ -516,11 +522,11 @@ function ActivityFeedList({ items }) {
 
 function matchesRoute(profile, routeId) {
   if (!profile || !routeId) return false;
-  const candidates = [profile.player_id, profile.id]
-    .filter((v) => v !== null && v !== undefined && v !== "")
-    .map((v) => String(v).replace(/^#/, ""));
+  if (profile.id === null || profile.id === undefined || profile.id === "") {
+    return false;
+  }
   const target = String(routeId).replace(/^#/, "");
-  return candidates.includes(target);
+  return String(profile.id).replace(/^#/, "") === target;
 }
 
 export default function AdminUserProfile() {
@@ -530,6 +536,12 @@ export default function AdminUserProfile() {
   const [activeTab, setActiveTab] = useState("transactions");
   const [period, setPeriod] = useState("weekly");
   const [page, setPage] = useState(1);
+  const [notice, setNotice] = useState({ type: "", text: "" });
+  const [confirmDialog, setConfirmDialog] = useState(null); // "ban" | "unban" | "reset" | null
+  const [resetPasswordInput, setResetPasswordInput] = useState("");
+  const [resetFormError, setResetFormError] = useState("");
+  const [temporaryPassword, setTemporaryPassword] = useState(null);
+  const [passwordCopied, setPasswordCopied] = useState(false);
   const [syncedUserId, setSyncedUserId] = useState(userId);
 
   if (syncedUserId !== userId) {
@@ -537,6 +549,12 @@ export default function AdminUserProfile() {
     setPage(1);
     setActiveTab("transactions");
     setPeriod("weekly");
+    setNotice({ type: "", text: "" });
+    setConfirmDialog(null);
+    setResetPasswordInput("");
+    setResetFormError("");
+    setTemporaryPassword(null);
+    setPasswordCopied(false);
   }
 
   const safePeriod = ADMIN_USER_PERIODS.includes(period) ? period : "weekly";
@@ -562,6 +580,13 @@ export default function AdminUserProfile() {
   } = useGetAdminUserQuery(userId, {
     skip: !userId,
   });
+
+  const [banUser, { isLoading: banning }] = useBanAdminUserMutation();
+  const [unbanUser, { isLoading: unbanning }] = useUnbanAdminUserMutation();
+  const [resetPassword, { isLoading: resettingPassword }] =
+    useResetAdminUserPasswordMutation();
+  const banActionBusy = banning || unbanning;
+  const actionBusy = banActionBusy || resettingPassword;
 
   const profile = currentData ?? (data && matchesRoute(data, userId) ? data : undefined);
 
@@ -762,6 +787,128 @@ export default function AdminUserProfile() {
     String(statusLabel).toLowerCase() === "banned" ||
     String(statusLabel).toLowerCase() === "inactive";
 
+  function openBanConfirm() {
+    if (!userId || actionBusy || isBanned) return;
+    setConfirmDialog("ban");
+  }
+
+  function openUnbanConfirm() {
+    if (!userId || actionBusy || !isBanned) return;
+    setConfirmDialog("unban");
+  }
+
+  function openResetConfirm() {
+    if (!userId || actionBusy) return;
+    setResetPasswordInput("");
+    setResetFormError("");
+    setTemporaryPassword(null);
+    setPasswordCopied(false);
+    setConfirmDialog("reset");
+  }
+
+  function closeConfirmDialog() {
+    if (actionBusy) return;
+    setConfirmDialog(null);
+    setResetPasswordInput("");
+    setResetFormError("");
+  }
+
+  function closeTemporaryPasswordDialog() {
+    setTemporaryPassword(null);
+    setPasswordCopied(false);
+  }
+
+  async function confirmBanAction() {
+    if (!userId || actionBusy || isBanned) return;
+
+    setNotice({ type: "", text: "" });
+    try {
+      const result = await banUser(userId).unwrap();
+      setConfirmDialog(null);
+      setNotice({
+        type: "success",
+        text: result?.message || "User banned successfully",
+      });
+    } catch (err) {
+      setNotice({
+        type: "error",
+        text: getErrorMessage(err, "Failed to ban user. Please try again."),
+      });
+    }
+  }
+
+  async function confirmUnbanAction() {
+    if (!userId || actionBusy || !isBanned) return;
+
+    setNotice({ type: "", text: "" });
+    try {
+      const result = await unbanUser(userId).unwrap();
+      setConfirmDialog(null);
+      setNotice({
+        type: "success",
+        text: result?.message || "User unbanned successfully",
+      });
+    } catch (err) {
+      setNotice({
+        type: "error",
+        text: getErrorMessage(err, "Failed to unban user. Please try again."),
+      });
+    }
+  }
+
+  async function confirmResetPasswordAction() {
+    if (!userId || actionBusy) return;
+
+    const password = resetPasswordInput.trim();
+    if (!password) {
+      setResetFormError("Enter a new password to continue.");
+      return;
+    }
+
+    setResetFormError("");
+    setNotice({ type: "", text: "" });
+    setTemporaryPassword(null);
+    setPasswordCopied(false);
+
+    try {
+      const result = await resetPassword({ id: userId, password }).unwrap();
+      setConfirmDialog(null);
+      setResetPasswordInput("");
+      setNotice({
+        type: "success",
+        text: result?.message || "Password reset successfully",
+      });
+      if (result?.temporary_password) {
+        setTemporaryPassword(result.temporary_password);
+      } else {
+        setNotice({
+          type: "error",
+          text: "Password was reset, but no temporary password was returned.",
+        });
+      }
+    } catch (err) {
+      setTemporaryPassword(null);
+      setNotice({
+        type: "error",
+        text: getErrorMessage(err, "Failed to reset password. Please try again."),
+      });
+    }
+  }
+
+  async function copyTemporaryPassword() {
+    if (!temporaryPassword) return;
+    try {
+      await navigator.clipboard.writeText(temporaryPassword);
+      setPasswordCopied(true);
+      window.setTimeout(() => setPasswordCopied(false), 2000);
+    } catch {
+      setNotice({
+        type: "error",
+        text: "Couldn’t copy the password. Please copy it manually.",
+      });
+    }
+  }
+
   const statCards = useMemo(() => {
     if (!profile) return [];
     return [
@@ -846,6 +993,24 @@ export default function AdminUserProfile() {
         </div>
       </div>
 
+      {notice.text && (
+        <div
+          className="mb-4 rounded-lg px-4 py-3 text-sm"
+          role="status"
+          style={{
+            fontFamily: FONT,
+            color: notice.type === "success" ? colors.primaryBright : colors.dangerSoft,
+            backgroundColor:
+              notice.type === "success" ? colors.primaryBg10 : colors.dangerBg10,
+            border: `1px solid ${
+              notice.type === "success" ? colors.primaryBg20 : colors.dangerBg25
+            }`,
+          }}
+        >
+          {notice.text}
+        </div>
+      )}
+
       {showSoftError && (
         <SoftErrorBanner
           message="Profile couldn’t refresh. Showing the last loaded results."
@@ -891,7 +1056,7 @@ export default function AdminUserProfile() {
                     {displayName}
                   </p>
                   <p className="text-xs mt-0.5" style={{ color: colors.textSecondary }}>
-                    {formatPlayerId(profile.player_id ?? profile.id ?? userId)}
+                    {formatPlayerId(profile.player_id ?? userId)}
                   </p>
                   <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-400">
                     {profile.username && (
@@ -952,37 +1117,49 @@ export default function AdminUserProfile() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-shrink-0">
                 <button
                   type="button"
-                  className="flex items-center justify-center gap-2 rounded-lg text-sm font-medium hover:brightness-125 transition w-[116px] whitespace-nowrap"
+                  onClick={isBanned ? openUnbanConfirm : openBanConfirm}
+                  disabled={actionBusy}
+                  className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-sm font-medium whitespace-nowrap hover:brightness-125 transition disabled:opacity-60 disabled:cursor-not-allowed"
                   style={{
                     backgroundColor: "transparent",
-                    border: `1px solid ${colors.dangerSoft}`,
-                    color: colors.dangerSoft,
-                    paddingTop: "10px",
-                    paddingBottom: "10px",
-                    paddingLeft: "38.39px",
-                    paddingRight: "38.39px",
+                    border: `1px solid ${
+                      isBanned ? colors.primaryBright : colors.dangerSoft
+                    }`,
+                    color: isBanned ? colors.primaryBright : colors.dangerSoft,
                   }}
                 >
-                  <Ban size={16} />
-                  Ban user
+                  {banActionBusy ? (
+                    <RefreshCw size={16} className="shrink-0 animate-spin" aria-hidden />
+                  ) : (
+                    <Ban size={16} className="shrink-0" />
+                  )}
+                  {banning
+                    ? "Banning…"
+                    : unbanning
+                      ? "Unbanning…"
+                      : isBanned
+                        ? "Unban user"
+                        : "Ban user"}
                 </button>
                 <button
                   type="button"
-                  className="flex items-center justify-center gap-2 rounded-lg text-sm font-medium text-white hover:brightness-110 transition w-[150px]"
+                  onClick={openResetConfirm}
+                  disabled={actionBusy}
+                  className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-sm font-medium text-white whitespace-nowrap hover:brightness-110 transition disabled:opacity-60 disabled:cursor-not-allowed"
                   style={{
                     backgroundColor: colors.accentPrimary,
                     border: `1px solid ${colors.accentPrimary}`,
-                    paddingTop: "10px",
-                    paddingBottom: "10px",
-                    paddingLeft: "44.02px",
-                    paddingRight: "44.02px",
                   }}
                 >
-                  <KeyRound size={16} />
-                  Reset Password
+                  {resettingPassword ? (
+                    <RefreshCw size={16} className="shrink-0 animate-spin" aria-hidden />
+                  ) : (
+                    <KeyRound size={16} className="shrink-0" />
+                  )}
+                  {resettingPassword ? "Resetting…" : "Reset Password"}
                 </button>
               </div>
             </div>
@@ -1156,6 +1333,312 @@ export default function AdminUserProfile() {
           )}
         </div>
       </div>
+
+      {confirmDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: colors.overlay }}
+          onClick={closeConfirmDialog}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="profile-confirm-title"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[420px] rounded-2xl p-6"
+            style={{
+              backgroundColor: colors.surface,
+              border: `1px solid ${BORDER}`,
+              boxShadow: `0 25px 50px -12px ${colors.shadow}`,
+            }}
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                style={{
+                  backgroundColor:
+                    confirmDialog === "ban"
+                      ? colors.dangerBg10
+                      : confirmDialog === "reset"
+                        ? colors.accentBg20
+                        : colors.primaryBg10,
+                  color:
+                    confirmDialog === "ban"
+                      ? colors.dangerSoft
+                      : confirmDialog === "reset"
+                        ? colors.accentSoft
+                        : colors.primaryBright,
+                }}
+              >
+                {confirmDialog === "reset" ? <KeyRound size={18} /> : <Ban size={18} />}
+              </div>
+              <button
+                type="button"
+                onClick={closeConfirmDialog}
+                disabled={actionBusy}
+                aria-label="Close"
+                className="disabled:opacity-50"
+                style={{ color: colors.textSecondary }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <h2
+              id="profile-confirm-title"
+              className="mb-2"
+              style={{
+                fontFamily: FONT,
+                fontWeight: 700,
+                fontSize: "20px",
+                lineHeight: "28px",
+                color: colors.textPrimary,
+              }}
+            >
+              {confirmDialog === "ban"
+                ? "Ban player?"
+                : confirmDialog === "unban"
+                  ? "Unban player?"
+                  : "Reset password?"}
+            </h2>
+            <p
+              className={confirmDialog === "reset" ? "mb-4" : "mb-6"}
+              style={{
+                fontFamily: FONT,
+                fontSize: "14px",
+                lineHeight: "22px",
+                color: colors.textSecondary,
+              }}
+            >
+              {confirmDialog === "ban" ? (
+                <>
+                  Ban <span style={{ color: colors.textPrimary, fontWeight: 600 }}>{displayName}</span>?
+                  {" "}This will mark the player as banned.
+                </>
+              ) : confirmDialog === "unban" ? (
+                <>
+                  Unban <span style={{ color: colors.textPrimary, fontWeight: 600 }}>{displayName}</span>?
+                  {" "}This will restore the player to active status.
+                </>
+              ) : (
+                <>
+                  Reset the password for{" "}
+                  <span style={{ color: colors.textPrimary, fontWeight: 600 }}>{displayName}</span>?
+                  {" "}Enter the new password below. A temporary password from the server will be shown after success.
+                </>
+              )}
+            </p>
+
+            {confirmDialog === "reset" && (
+              <div className="mb-6">
+                <label
+                  htmlFor="reset-password-input"
+                  className="block mb-2 text-xs font-medium uppercase tracking-wide"
+                  style={{ color: colors.textSecondary, fontFamily: FONT }}
+                >
+                  New password
+                </label>
+                <input
+                  id="reset-password-input"
+                  type="text"
+                  autoComplete="new-password"
+                  value={resetPasswordInput}
+                  onChange={(e) => {
+                    setResetPasswordInput(e.target.value);
+                    if (resetFormError) setResetFormError("");
+                  }}
+                  disabled={actionBusy}
+                  className="w-full h-11 px-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-bright disabled:opacity-60"
+                  style={{
+                    fontFamily: FONT,
+                    backgroundColor: colors.surfaceElevated,
+                    border: `1px solid ${resetFormError ? colors.dangerSoft : BORDER}`,
+                    color: colors.textPrimary,
+                  }}
+                  placeholder="Enter new password"
+                />
+                {resetFormError ? (
+                  <p className="mt-2 text-sm" style={{ color: colors.dangerSoft, fontFamily: FONT }}>
+                    {resetFormError}
+                  </p>
+                ) : null}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeConfirmDialog}
+                disabled={actionBusy}
+                className="h-10 px-4 rounded-lg text-sm font-bold transition hover:brightness-110 disabled:opacity-60"
+                style={{
+                  fontFamily: FONT,
+                  backgroundColor: colors.button,
+                  color: colors.white,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={
+                  confirmDialog === "ban"
+                    ? confirmBanAction
+                    : confirmDialog === "unban"
+                      ? confirmUnbanAction
+                      : confirmResetPasswordAction
+                }
+                disabled={actionBusy}
+                className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-lg text-sm font-bold transition hover:brightness-110 disabled:opacity-60"
+                style={{
+                  fontFamily: FONT,
+                  backgroundColor:
+                    confirmDialog === "ban"
+                      ? colors.dangerSoft
+                      : confirmDialog === "reset"
+                        ? colors.accentPrimary
+                        : colors.primary,
+                  color:
+                    confirmDialog === "ban" || confirmDialog === "reset"
+                      ? colors.white
+                      : colors.surfacePanel,
+                }}
+              >
+                {actionBusy ? (
+                  <RefreshCw size={16} className="animate-spin" aria-hidden />
+                ) : null}
+                {confirmDialog === "ban"
+                  ? banning
+                    ? "Banning…"
+                    : "Ban user"
+                  : confirmDialog === "unban"
+                    ? unbanning
+                      ? "Unbanning…"
+                      : "Unban user"
+                    : resettingPassword
+                      ? "Resetting…"
+                      : "Reset password"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {temporaryPassword && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: colors.overlay }}
+          onClick={closeTemporaryPasswordDialog}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="temp-password-title"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-[420px] rounded-2xl p-6"
+            style={{
+              backgroundColor: colors.surface,
+              border: `1px solid ${BORDER}`,
+              boxShadow: `0 25px 50px -12px ${colors.shadow}`,
+            }}
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                style={{
+                  backgroundColor: colors.primaryBg10,
+                  color: colors.primaryBright,
+                }}
+              >
+                <KeyRound size={18} />
+              </div>
+              <button
+                type="button"
+                onClick={closeTemporaryPasswordDialog}
+                aria-label="Close"
+                style={{ color: colors.textSecondary }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <h2
+              id="temp-password-title"
+              className="mb-2"
+              style={{
+                fontFamily: FONT,
+                fontWeight: 700,
+                fontSize: "20px",
+                lineHeight: "28px",
+                color: colors.textPrimary,
+              }}
+            >
+              Temporary password
+            </h2>
+            <p
+              className="mb-4"
+              style={{
+                fontFamily: FONT,
+                fontSize: "14px",
+                lineHeight: "22px",
+                color: colors.textSecondary,
+              }}
+            >
+              Share this password securely with{" "}
+              <span style={{ color: colors.textPrimary, fontWeight: 600 }}>{displayName}</span>.
+              It will disappear when you close this dialog.
+            </p>
+
+            <div
+              className="flex items-center gap-2 rounded-xl px-3 py-3 mb-6"
+              style={{
+                backgroundColor: colors.surfaceElevated,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              <code
+                className="flex-1 text-sm break-all select-all"
+                style={{
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                  color: colors.textPrimary,
+                }}
+              >
+                {temporaryPassword}
+              </code>
+              <button
+                type="button"
+                onClick={copyTemporaryPassword}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold shrink-0 transition hover:brightness-110"
+                style={{
+                  fontFamily: FONT,
+                  backgroundColor: passwordCopied ? colors.primaryBg20 : colors.button,
+                  color: passwordCopied ? colors.primaryBright : colors.white,
+                }}
+              >
+                {passwordCopied ? <Check size={14} /> : <Copy size={14} />}
+                {passwordCopied ? "Copied" : "Copy"}
+              </button>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={closeTemporaryPasswordDialog}
+                className="h-10 px-4 rounded-lg text-sm font-bold transition hover:brightness-110"
+                style={{
+                  fontFamily: FONT,
+                  backgroundColor: colors.primary,
+                  color: colors.surfacePanel,
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

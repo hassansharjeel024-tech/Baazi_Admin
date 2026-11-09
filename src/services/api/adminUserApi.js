@@ -120,7 +120,7 @@ export const adminUserApi = baseApi.injectEndpoints({
           ? [
               ...result.items.map((u) => ({
                 type: "AdminUsers",
-                id: u.player_id ?? u.id,
+                id: u.id ?? u.player_id,
               })),
               { type: "AdminUsers", id: "LIST" },
             ]
@@ -140,6 +140,77 @@ export const adminUserApi = baseApi.injectEndpoints({
         return data;
       },
       providesTags: (_result, _err, id) => [{ type: "AdminUsers", id }],
+    }),
+
+    /** PATCH /admin-user/v1/ban/{id} */
+    banAdminUser: builder.mutation({
+      query: (id) => ({
+        url: `/admin-user/v1/ban/${encodeURIComponent(id)}`,
+        method: "PATCH",
+      }),
+      transformResponse: (response) => ({
+        message:
+          typeof response?.message === "string" && response.message.trim()
+            ? response.message.trim()
+            : "User banned successfully",
+        data: response?.data ?? null,
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: "AdminUsers", id },
+        { type: "AdminUsers", id: "LIST" },
+        { type: "AdminUsers", id: "STATS-weekly" },
+        { type: "AdminUsers", id: "STATS-monthly" },
+        { type: "AdminUsers", id: "STATS-yearly" },
+      ],
+    }),
+
+    /** PATCH /admin-user/v1/unban/{id} */
+    unbanAdminUser: builder.mutation({
+      query: (id) => ({
+        url: `/admin-user/v1/unban/${encodeURIComponent(id)}`,
+        method: "PATCH",
+      }),
+      transformResponse: (response) => ({
+        message:
+          typeof response?.message === "string" && response.message.trim()
+            ? response.message.trim()
+            : "User unbanned successfully",
+        data: response?.data ?? null,
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: "AdminUsers", id },
+        { type: "AdminUsers", id: "LIST" },
+        { type: "AdminUsers", id: "STATS-weekly" },
+        { type: "AdminUsers", id: "STATS-monthly" },
+        { type: "AdminUsers", id: "STATS-yearly" },
+      ],
+    }),
+
+    /** PATCH /admin-user/v1/reset-password/{id} */
+    resetAdminUserPassword: builder.mutation({
+      query: ({ id, password }) => ({
+        url: `/admin-user/v1/reset-password/${encodeURIComponent(id)}`,
+        method: "PATCH",
+        body: { password },
+      }),
+      transformResponse: (response) => {
+        const payload = response?.data;
+        const temporary_password =
+          payload &&
+          typeof payload === "object" &&
+          typeof payload.temporary_password === "string" &&
+          payload.temporary_password
+            ? payload.temporary_password
+            : null;
+
+        return {
+          message:
+            typeof response?.message === "string" && response.message.trim()
+              ? response.message.trim()
+              : "Password reset successfully",
+          temporary_password,
+        };
+      },
     }),
 
     /** GET /admin-user/v1/{id}/transactions */
@@ -287,6 +358,9 @@ export const {
   useGetAdminUserStatsQuery,
   useListAdminUsersQuery,
   useGetAdminUserQuery,
+  useBanAdminUserMutation,
+  useUnbanAdminUserMutation,
+  useResetAdminUserPasswordMutation,
   useGetAdminUserTransactionsQuery,
   useGetAdminUserTasksXpQuery,
   useGetAdminUserRedemptionsQuery,

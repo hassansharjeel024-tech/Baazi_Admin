@@ -8,5 +8,6 @@ import "./userRewardApi";
 import "./coinPackageApi";
 import "./paymentApi";
 import "./adminUserApi";
+import "./graphApi";
 
 export { baseApi } from "./baseApi";

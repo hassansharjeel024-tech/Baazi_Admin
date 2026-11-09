@@ -1,13 +1,20 @@
 import { useMemo, useState } from "react";
-import { Download, ChevronDown, ChevronLeft, ChevronRight, User } from "lucide-react";
+import { Download, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, User } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { useListPaymentsQuery } from "../services/api/paymentApi";
-import { useGetCoinPackagesQuery } from "../services/api/coinPackageApi";
 import { useListUserRewardsQuery } from "../services/api/userRewardApi";
+import {
+  GRAPH_PERIODS,
+  useGetCarrotDistributionQuery,
+  useGetTopBundlesQuery,
+} from "../services/api/graphApi";
 import { getErrorMessage } from "../lib/apiHelpers";
 import { colors } from "../theme";
 
 const PAGE_SIZE = 4;
+const EMPTY_DIST_ITEMS = [];
+const EMPTY_BUNDLE_ITEMS = [];
+const DIST_COLOR_FALLBACK = colors.primaryBright;
 
 // key wale cards live hain, baaki ki API abhi nahi hai
 const STATS = [
@@ -16,13 +23,6 @@ const STATS = [
   { key: "redeemed", label: "Carrots Redeemed", value: "980K", noteColor: colors.dangerSoft, note: "Via rewards shop" },
   { key: "users", label: "Users with Transactions", value: "4,829", noteColor: colors.textLight, note: "Active all time" },
   { key: "revenue", label: "Coin Purchases Revenue", value: "$1800", noteColor: colors.primaryBright, note: "This Month" },
-];
-
-// Distribution bars: API nahi hai, static
-const CARROT_DIST = [
-  { label: "Game target achieved", value: "940K", pct: 75, color: colors.primaryBright },
-  { label: "Daily login / streak", value: "420K", pct: 45, color: colors.accentSoft },
-  { label: "Referral bonus", value: "310K", pct: 32, color: colors.chartPurple },
 ];
 
 const COIN_DIST = [
@@ -41,6 +41,12 @@ const PERIOD_OPTIONS = [
   { value: "all", label: "All time" },
   { value: "month", label: "This month" },
   { value: "30d", label: "Last 30 days" },
+];
+
+const GRAPH_PERIOD_OPTIONS = [
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
 ];
 
 const BORDER_COLOR = colors.border;
@@ -77,6 +83,8 @@ function exportCsv(rows) {
 }
 
 function DistBar({ label, value, pct, color }) {
+  // Visual clamp only — API pct is used as-is for display width intent
+  const width = Math.max(0, Math.min(100, Number(pct) || 0));
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-between font-['Montserrat'] font-medium text-xs leading-4 tracking-[0.6px]">
@@ -84,8 +92,53 @@ function DistBar({ label, value, pct, color }) {
         <span style={{ color: colors.textLight }}>{value}</span>
       </div>
       <div className="w-full h-3 rounded-full" style={{ backgroundColor: colors.surface }}>
-        <div className="h-3 rounded-[4px]" style={{ width: `${pct}%`, backgroundColor: color }} />
+        <div
+          className="h-3 rounded-[4px]"
+          style={{
+            width: `${width}%`,
+            backgroundColor: color || DIST_COLOR_FALLBACK,
+          }}
+        />
       </div>
+    </div>
+  );
+}
+
+function DistSkeleton({ rows = 3 }) {
+  return (
+    <div className="flex flex-col gap-8">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex flex-col gap-3">
+          <div className="flex justify-between">
+            <div className="h-3 w-36 rounded animate-pulse" style={{ backgroundColor: colors.skeleton }} />
+            <div className="h-3 w-12 rounded animate-pulse" style={{ backgroundColor: colors.skeleton }} />
+          </div>
+          <div className="w-full h-3 rounded-full animate-pulse" style={{ backgroundColor: colors.skeleton }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TopBundlesSkeleton({ rows = 3 }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {Array.from({ length: rows }, (_, i) => (
+        <div
+          key={i}
+          className="flex items-center justify-between rounded-xl border p-3"
+          style={{ borderColor: BORDER_COLOR }}
+        >
+          <div className="space-y-2">
+            <div className="h-4 w-28 rounded animate-pulse" style={{ backgroundColor: colors.skeleton }} />
+            <div className="h-3 w-14 rounded animate-pulse" style={{ backgroundColor: colors.skeleton }} />
+          </div>
+          <div className="space-y-2 text-right">
+            <div className="h-4 w-12 rounded animate-pulse ml-auto" style={{ backgroundColor: colors.skeleton }} />
+            <div className="h-3 w-10 rounded animate-pulse ml-auto" style={{ backgroundColor: colors.skeleton }} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -131,13 +184,11 @@ export default function AdminWallet() {
     isError: rewardsIsError,
     error: rewardsError,
   } = useListUserRewardsQuery();
-  const { data: packages = [], isLoading: packagesLoading } = useGetCoinPackagesQuery();
 
   const data = {
-    loading: paymentsLoading || rewardsLoading || packagesLoading,
+    loading: paymentsLoading || rewardsLoading,
     payments: paymentsIsError ? null : payments,
     rewards: rewardsIsError ? null : (claimsData?.rewards ?? null),
-    packages,
     errors: [
       ...(paymentsIsError ? [getErrorMessage(paymentsError, "Failed to load payments")] : []),
       ...(rewardsIsError ? [getErrorMessage(rewardsError, "Failed to load redemptions")] : []),
@@ -146,7 +197,69 @@ export default function AdminWallet() {
 
   const [typeFilter, setTypeFilter] = useState("all");
   const [periodFilter, setPeriodFilter] = useState("all");
+  const [carrotPeriod, setCarrotPeriod] = useState("weekly");
+  const [bundlesPeriod, setBundlesPeriod] = useState("weekly");
   const [page, setPage] = useState(1);
+
+  const safeCarrotPeriod = GRAPH_PERIODS.includes(carrotPeriod)
+    ? carrotPeriod
+    : "weekly";
+  const safeBundlesPeriod = GRAPH_PERIODS.includes(bundlesPeriod)
+    ? bundlesPeriod
+    : "weekly";
+
+  const {
+    data: carrotDistData,
+    currentData: carrotDistCurrent,
+    isLoading: carrotDistLoading,
+    isFetching: carrotDistFetching,
+    isError: carrotDistIsError,
+    error: carrotDistError,
+    refetch: refetchCarrotDist,
+  } = useGetCarrotDistributionQuery({ period: safeCarrotPeriod });
+
+  // Prefer currentData so a previous period's cache never paints for a new period
+  const carrotDist =
+    carrotDistCurrent ??
+    (carrotDistData?.period === safeCarrotPeriod ? carrotDistData : undefined);
+
+  const carrotItems = carrotDist?.items ?? EMPTY_DIST_ITEMS;
+  const showCarrotSkeleton =
+    carrotDistLoading || (carrotDistFetching && !carrotDist);
+  const showCarrotHardError = carrotDistIsError && !carrotDist;
+  const showCarrotSoftError = carrotDistIsError && Boolean(carrotDist);
+  const carrotErrorMessage = carrotDistIsError
+    ? getErrorMessage(
+        carrotDistError,
+        "Unable to load carrot distribution. Please try again."
+      )
+    : "";
+
+  const {
+    data: topBundlesData,
+    currentData: topBundlesCurrent,
+    isLoading: topBundlesLoading,
+    isFetching: topBundlesFetching,
+    isError: topBundlesIsError,
+    error: topBundlesError,
+    refetch: refetchTopBundles,
+  } = useGetTopBundlesQuery({ period: safeBundlesPeriod });
+
+  const topBundlesPayload =
+    topBundlesCurrent ??
+    (topBundlesData?.period === safeBundlesPeriod ? topBundlesData : undefined);
+
+  const topBundleItems = topBundlesPayload?.items ?? EMPTY_BUNDLE_ITEMS;
+  const showBundlesSkeleton =
+    topBundlesLoading || (topBundlesFetching && !topBundlesPayload);
+  const showBundlesHardError = topBundlesIsError && !topBundlesPayload;
+  const showBundlesSoftError = topBundlesIsError && Boolean(topBundlesPayload);
+  const bundlesErrorMessage = topBundlesIsError
+    ? getErrorMessage(
+        topBundlesError,
+        "Unable to load top bundles. Please try again."
+      )
+    : "";
 
   // ---- live stat cards ----
   const liveValues = useMemo(() => {
@@ -179,37 +292,6 @@ export default function AdminWallet() {
     if (s.key === "revenue") return { ...s, value: data.loading ? "-" : liveValues.revenue ?? "-" };
     return s;
   });
-
-  // ---- Top bundles ----
-  const topBundles = useMemo(() => {
-    if (!data.payments) return null;
-    const priceById = new Map(data.packages.map((k) => [k.id, k.price]));
-    const groups = new Map();
-
-    data.payments
-      .filter((p) => p.status === 2)
-      .forEach((p) => {
-        const id = p.coin_package_id;
-        const cur = groups.get(id) || {
-          id,
-          name: p.coin_package?.title || `Package #${id}`,
-          amount: Number(p.amount || 0),
-          count: 0,
-        };
-        cur.count += 1;
-        groups.set(id, cur);
-      });
-
-    return [...groups.values()]
-      .map((g) => ({
-        id: g.id,
-        name: g.name,
-        price: formatMoney(Number(priceById.get(g.id) ?? g.amount)),
-        count: g.count,
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
-  }, [data.payments, data.packages]);
 
   // ---- Economy events (coin purchases + redemptions) ----
   const events = useMemo(() => {
@@ -337,14 +419,83 @@ export default function AdminWallet() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
         <div
           className="flex flex-col gap-8 rounded-2xl border px-8 pt-[31.5px] pb-8 lg:min-h-[352px]"
-          style={CARD_STYLE}
+          style={{
+            ...CARD_STYLE,
+            opacity: carrotDistFetching && carrotDist && !carrotDistIsError ? 0.9 : 1,
+            transition: "opacity 160ms ease",
+          }}
         >
-          <h2 className="font-['Montserrat'] font-semibold text-lg leading-6" style={{ color: colors.textPrimary }}>
-            Carrot distribution by type
-          </h2>
-          {CARROT_DIST.map((d) => (
-            <DistBar key={d.label} {...d} />
-          ))}
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <h2 className="font-['Montserrat'] font-semibold text-lg leading-6" style={{ color: colors.textPrimary }}>
+              Carrot distribution by type
+            </h2>
+            <Dropdown
+              value={safeCarrotPeriod}
+              onChange={setCarrotPeriod}
+              options={GRAPH_PERIOD_OPTIONS}
+            />
+          </div>
+
+          {showCarrotSoftError && (
+            <div
+              className="-mt-4 rounded-lg px-3 py-2.5 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+              role="status"
+              style={{
+                color: colors.warning,
+                backgroundColor: colors.warningBg10,
+                border: `1px solid ${colors.warningBg25}`,
+              }}
+            >
+              <span>Carrot distribution couldn’t refresh. Showing the last loaded results.</span>
+              <button
+                type="button"
+                onClick={() => refetchCarrotDist()}
+                disabled={carrotDistFetching}
+                className="inline-flex items-center gap-2 font-bold hover:underline disabled:opacity-60 shrink-0"
+                style={{ color: colors.warning }}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${carrotDistFetching ? "animate-spin" : ""}`} aria-hidden />
+                {carrotDistFetching ? "Refreshing…" : "Retry"}
+              </button>
+            </div>
+          )}
+
+          {showCarrotHardError ? (
+            <div className="flex flex-col gap-3">
+              <p className="font-['Montserrat'] text-sm font-semibold" style={{ color: colors.dangerSoft }}>
+                Couldn’t load carrot distribution
+              </p>
+              <p className="font-['Montserrat'] text-sm" style={{ color: colors.textSecondary }}>
+                {carrotErrorMessage}
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchCarrotDist()}
+                disabled={carrotDistFetching}
+                className="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg text-sm font-bold transition hover:brightness-110 disabled:opacity-60 self-start"
+                style={{ backgroundColor: colors.button, color: colors.white }}
+              >
+                <RefreshCw className={`w-4 h-4 ${carrotDistFetching ? "animate-spin" : ""}`} aria-hidden />
+                {carrotDistFetching ? "Retrying…" : "Retry"}
+              </button>
+            </div>
+          ) : showCarrotSkeleton ? (
+            <DistSkeleton />
+          ) : carrotItems.length === 0 ? (
+            <p className="font-['Montserrat'] text-sm" style={{ color: colors.textSecondary }}>
+              No carrot distribution data for this period.
+            </p>
+          ) : (
+            carrotItems.map((d) => (
+              <DistBar
+                key={d.label}
+                label={d.label}
+                value={d.value}
+                pct={d.pct}
+                color={d.color}
+              />
+            ))
+          )}
         </div>
 
         <div
@@ -361,57 +512,105 @@ export default function AdminWallet() {
 
         <div
           className="flex flex-col gap-6 rounded-2xl border p-8 lg:min-h-[352px]"
-          style={CARD_STYLE}
+          style={{
+            ...CARD_STYLE,
+            opacity: topBundlesFetching && topBundlesPayload && !topBundlesIsError ? 0.9 : 1,
+            transition: "opacity 160ms ease",
+          }}
         >
-          <h2 className="font-['Montserrat'] font-semibold text-lg leading-6" style={{ color: colors.textPrimary }}>
-            Top Bundles
-          </h2>
-          <div className="flex flex-col gap-4">
-            {data.loading && (
-              <p className="font-['Montserrat'] text-sm" style={{ color: colors.textSecondary }}>
-                Loading bundles...
-              </p>
-            )}
-            {!data.loading && topBundles && topBundles.length === 0 && (
-              <p className="font-['Montserrat'] text-sm" style={{ color: colors.textSecondary }}>
-                No purchases yet.
-              </p>
-            )}
-            {!data.loading && !topBundles && (
-              <p className="font-['Montserrat'] text-sm" style={{ color: colors.dangerSoft }}>
-                Could not load bundles.
-              </p>
-            )}
-            {(topBundles || []).map((b) => (
-              <div
-                key={b.id}
-                className="flex items-center justify-between rounded-xl border p-3"
-                style={{ borderColor: BORDER_COLOR }}
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <h2 className="font-['Montserrat'] font-semibold text-lg leading-6" style={{ color: colors.textPrimary }}>
+              Top Bundles
+            </h2>
+            <Dropdown
+              value={safeBundlesPeriod}
+              onChange={setBundlesPeriod}
+              options={GRAPH_PERIOD_OPTIONS}
+            />
+          </div>
+
+          {showBundlesSoftError && (
+            <div
+              className="-mt-2 rounded-lg px-3 py-2.5 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+              role="status"
+              style={{
+                color: colors.warning,
+                backgroundColor: colors.warningBg10,
+                border: `1px solid ${colors.warningBg25}`,
+              }}
+            >
+              <span>Top bundles couldn’t refresh. Showing the last loaded results.</span>
+              <button
+                type="button"
+                onClick={() => refetchTopBundles()}
+                disabled={topBundlesFetching}
+                className="inline-flex items-center gap-2 font-bold hover:underline disabled:opacity-60 shrink-0"
+                style={{ color: colors.warning }}
               >
-                <div>
-                  <p className="font-['Montserrat'] font-bold text-sm leading-5" style={{ color: colors.textPrimary }}>
-                    {b.name}
-                  </p>
-                  <p
-                    className="font-['Montserrat'] font-medium text-xs leading-4 tracking-[0.6px]"
-                    style={{ color: colors.textSecondary }}
-                  >
-                    {b.price}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-['Montserrat'] font-bold text-sm leading-5" style={{ color: colors.primaryBright }}>
-                    {b.count.toLocaleString()}
-                  </p>
-                  <p
-                    className="font-['Montserrat'] font-medium text-[10px] leading-4 tracking-[0.6px]"
-                    style={{ color: colors.muted40 }}
-                  >
-                    SOLD
-                  </p>
-                </div>
+                <RefreshCw className={`w-3.5 h-3.5 ${topBundlesFetching ? "animate-spin" : ""}`} aria-hidden />
+                {topBundlesFetching ? "Refreshing…" : "Retry"}
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-4">
+            {showBundlesHardError ? (
+              <div className="flex flex-col gap-3">
+                <p className="font-['Montserrat'] text-sm font-semibold" style={{ color: colors.dangerSoft }}>
+                  Couldn’t load top bundles
+                </p>
+                <p className="font-['Montserrat'] text-sm" style={{ color: colors.textSecondary }}>
+                  {bundlesErrorMessage}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetchTopBundles()}
+                  disabled={topBundlesFetching}
+                  className="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg text-sm font-bold transition hover:brightness-110 disabled:opacity-60 self-start"
+                  style={{ backgroundColor: colors.button, color: colors.white }}
+                >
+                  <RefreshCw className={`w-4 h-4 ${topBundlesFetching ? "animate-spin" : ""}`} aria-hidden />
+                  {topBundlesFetching ? "Retrying…" : "Retry"}
+                </button>
               </div>
-            ))}
+            ) : showBundlesSkeleton ? (
+              <TopBundlesSkeleton />
+            ) : topBundleItems.length === 0 ? (
+              <p className="font-['Montserrat'] text-sm" style={{ color: colors.textSecondary }}>
+                No top bundles for this period.
+              </p>
+            ) : (
+              topBundleItems.map((b, i) => (
+                <div
+                  key={`${b.name}-${i}`}
+                  className="flex items-center justify-between rounded-xl border p-3"
+                  style={{ borderColor: BORDER_COLOR }}
+                >
+                  <div>
+                    <p className="font-['Montserrat'] font-bold text-sm leading-5" style={{ color: colors.textPrimary }}>
+                      {b.name}
+                    </p>
+                    <p
+                      className="font-['Montserrat'] font-medium text-xs leading-4 tracking-[0.6px]"
+                      style={{ color: colors.textSecondary }}
+                    >
+                      {b.price}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-['Montserrat'] font-bold text-sm leading-5" style={{ color: colors.primaryBright }}>
+                      {b.sold_label}
+                    </p>
+                    <p
+                      className="font-['Montserrat'] font-medium text-[10px] leading-4 tracking-[0.6px] uppercase"
+                      style={{ color: colors.muted40 }}
+                    >
+                      {b.status_label}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
